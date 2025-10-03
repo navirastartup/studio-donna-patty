@@ -1,0 +1,77 @@
+---
+description: Guia de front-end para projetos Next.js 15, React 19, TailwindCSS 4, Radix UI, Lucide
+alwaysApply: true
+globs: *.tsx,*.ts,*.css,*.mjs
+---
+# Guia de Front-end Studio Donna Patty
+
+## Stack
+- **Next.js 15** (App Router, SSR/SSG, layouts, metadata)
+- **React 19** (hooks, server components, client components)
+- **TailwindCSS 4** (utility-first, custom theme, responsividade)
+- **Radix UI** (acessibilidade, componentes base)
+- **Lucide** (ícones SVG)
+- **TypeScript** (tipagem estrita)
+
+## Estrutura de Componentes
+- Use a pasta `components/` para componentes reutilizáveis.
+- Componentes de UI genéricos ficam em `components/ui/`.
+- Componentes específicos de página podem ficar em subpastas ou diretamente em `app/`.
+- Prefira componentes funcionais e hooks.
+- Separe lógica de apresentação (UI) da lógica de dados (hooks, contextos).
+
+## Organização de Arquivos
+- Use nomes descritivos e em inglês para arquivos e pastas.
+- Exporte apenas o necessário de cada arquivo.
+- Utilize `@/` para imports absolutos (conforme `tsconfig.json`).
+
+## Estilização
+- Use **TailwindCSS** para toda a estilização.
+- Utilize as variáveis de cor e tipografia definidas em `globals.css`.
+- Não use CSS customizado fora do escopo do Tailwind, exceto para tokens globais.
+- Prefira classes utilitárias e composição via `clsx` ou `class-variance-authority`.
+
+## Paleta e Visual
+- Siga a paleta definida em `globals.css` (tons sóbrios, bege, preto, branco, dourado discreto).
+- Use tipografia elegante, com destaque para títulos (fontes Geist, serifadas para títulos se necessário).
+- Espaçamento generoso, foco em legibilidade e contraste.
+- Elementos arredondados, transições suaves.
+
+## Responsividade
+- Use breakpoints do Tailwind (`sm`, `md`, `lg`, `xl`, `2xl`).
+- Garanta boa experiência mobile-first.
+- Imagens e backgrounds devem ser responsivos e otimizados.
+
+## Acessibilidade
+- Sempre utilize atributos `alt` em imagens.
+- Use Radix UI para componentes interativos (botões, diálogos, etc).
+- Garanta contraste suficiente e navegação por teclado.
+- Utilize roles e aria-labels quando necessário.
+
+## Convenções de Código
+- Use TypeScript estrito.
+- Prefira arrow functions e hooks.
+- Nomeie componentes com PascalCase.
+- Use ESLint e siga as recomendações do Next.js.
+- Não deixe código morto ou comentários desnecessários.
+
+## Integração de UI Libraries
+- Use Radix UI apenas para componentes que exigem acessibilidade avançada.
+- Use Lucide para ícones, sempre em SVG e com tamanho controlado por Tailwind.
+
+## Hooks e Contextos
+- Coloque hooks customizados em `lib/` ou `hooks/`.
+- Use contextos apenas quando necessário para estado global.
+
+## Padrões de Página
+- O layout principal deve ser definido em `app/layout.tsx`.
+- Landing pages devem ser minimalistas, com foco visual e CTA claro.
+- Evite navegação excessiva na home (navbar opcional, conforme design).
+
+## Boas Práticas Gerais
+- Comente apenas o necessário para explicar decisões complexas.
+- Prefira legibilidade à "esperteza" no código.
+- Teste responsividade e acessibilidade em todas as páginas.
+
+---
+Este guia deve ser seguido em toda a aplicação para garantir consistência visual, técnica e de experiência do usuário.
