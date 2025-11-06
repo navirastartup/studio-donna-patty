@@ -1,16 +1,14 @@
 "use client";
 import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase";
 import { PlusCircle, Edit, Trash2, XCircle } from "lucide-react";
-import { ImageUpload } from "@/components/ui/image-upload"; // Importar o novo componente
+import { ImageUpload } from "@/components/ui/image-upload";
 
 interface Professional {
   id: string;
   name: string;
   specialty?: string;
-  image_url?: string | null; // Pode ser null agora
+  image_url?: string | null;
   bio?: string;
-  // availability: any; // Será adicionado posteriormente para gerenciar horários
 }
 
 export default function AdminProfissionaisPage() {
@@ -22,23 +20,25 @@ export default function AdminProfissionaisPage() {
   const [form, setForm] = useState({
     name: "",
     specialty: "",
-    // Remover image_url do estado do formulário diretamente aqui
     bio: "",
   });
-  const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null); // Estado para a URL da imagem atual
+  const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
 
   useEffect(() => {
     fetchProfessionals();
   }, []);
 
+  // ✅ Buscar lista de profissionais
   async function fetchProfessionals() {
     setLoading(true);
-    const { data, error } = await supabase.from('professionals').select('*');
-    if (error) {
-      console.error("Erro ao buscar profissionais:", error);
-      setError(error.message);
-    } else {
-      setProfessionals(data);
+    try {
+      const res = await fetch("/api/professionals", { cache: "no-store" });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setProfessionals(data.data || []);
+    } catch (err: any) {
+      console.error("Erro ao buscar profissionais:", err);
+      setError(err.message);
     }
     setLoading(false);
   }
@@ -49,25 +49,30 @@ export default function AdminProfissionaisPage() {
 
   const openAddModal = () => {
     setEditingProfessional(null);
-    setForm({ name: "", specialty: "", bio: "" }); // Remover image_url daqui
-    setCurrentImageUrl(null); // Limpar a URL da imagem atual
+    setForm({ name: "", specialty: "", bio: "" });
+    setCurrentImageUrl(null);
     setIsModalOpen(true);
   };
 
   const openEditModal = (professional: Professional) => {
     setEditingProfessional(professional);
-    setForm({ name: professional.name, specialty: professional.specialty || "", bio: professional.bio || "" });
-    setCurrentImageUrl(professional.image_url || null); // Definir a URL da imagem atual
+    setForm({
+      name: professional.name,
+      specialty: professional.specialty || "",
+      bio: professional.bio || "",
+    });
+    setCurrentImageUrl(professional.image_url || null);
     setIsModalOpen(true);
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingProfessional(null);
-    setForm({ name: "", specialty: "", bio: "" }); // Remover image_url daqui
-    setCurrentImageUrl(null); // Limpar a URL da imagem atual
+    setForm({ name: "", specialty: "", bio: "" });
+    setCurrentImageUrl(null);
   };
 
+  // ✅ Salvar (criar/editar) profissional
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -75,45 +80,47 @@ export default function AdminProfissionaisPage() {
     const professionalData = {
       name: form.name,
       specialty: form.specialty,
-      image_url: currentImageUrl, // Usar a URL do estado currentImageUrl
+      image_url: currentImageUrl,
       bio: form.bio,
     };
 
-    if (editingProfessional) {
-      // Lógica para editar profissional no Supabase
-      const { error } = await supabase
-        .from('professionals')
-        .update(professionalData)
-        .eq('id', editingProfessional.id);
-      if (error) {
-        console.error("Erro ao atualizar profissional:", error);
-        setError(error.message);
-      } else {
-        closeModal();
-        fetchProfessionals();
-      }
-    } else {
-      // Lógica para adicionar novo profissional no Supabase
-      const { error } = await supabase.from('professionals').insert([professionalData]);
-      if (error) {
-        console.error("Erro ao adicionar profissional:", error);
-        setError(error.message);
-      } else {
-        closeModal();
-        fetchProfessionals();
-      }
+    try {
+      const res = await fetch("/api/professionals", {
+        method: editingProfessional ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          editingProfessional
+            ? { id: editingProfessional.id, ...professionalData }
+            : professionalData
+        ),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro desconhecido");
+
+      closeModal();
+      fetchProfessionals();
+    } catch (err: any) {
+      console.error("Erro ao salvar profissional:", err);
+      alert(`Erro ao salvar profissional: ${err.message}`);
     }
   };
 
+  // ✅ Deletar profissional
   const handleDelete = async (id: string) => {
     if (confirm("Tem certeza que deseja deletar este profissional?")) {
-      setError(null);
-      const { error } = await supabase.from('professionals').delete().eq('id', id);
-      if (error) {
-        console.error("Erro ao deletar profissional:", error);
-        setError(error.message);
-      } else {
+      try {
+        const res = await fetch("/api/professionals", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Erro ao deletar");
         fetchProfessionals();
+      } catch (err: any) {
+        console.error("Erro ao deletar profissional:", err);
+        alert(`Erro ao deletar: ${err.message}`);
       }
     }
   };
@@ -168,7 +175,7 @@ export default function AdminProfissionaisPage() {
         </div>
       )}
 
-      {/* Modal de Adicionar/Editar Profissional */}
+      {/* Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-900 rounded-lg p-8 w-full max-w-md shadow-lg relative">
@@ -209,7 +216,7 @@ export default function AdminProfissionaisPage() {
                   initialImageUrl={currentImageUrl}
                   onUploadSuccess={url => setCurrentImageUrl(url)}
                   onRemove={() => setCurrentImageUrl(null)}
-                  bucketName="images" // O nome do seu bucket no Supabase Storage
+                  bucketName="images"
                 />
               </div>
               <div>

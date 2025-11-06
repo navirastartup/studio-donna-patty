@@ -85,7 +85,7 @@ export default function RootLayout({
         <div className="flex-1">{children}</div>
 
         <footer className="w-full bg-gray-900 text-gray-400 p-4 text-center text-sm mt-auto">
-          © {new Date().getFullYear()} {systemName}. Todos os direitos reservados.
+          © {new Date().getFullYear()} {systemName}. Todos os direitos reservados Azyra Sistemas.
         </footer>
       </body>
     </html>

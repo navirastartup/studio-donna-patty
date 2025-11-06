@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { Loader2, UploadCloud, XCircle } from "lucide-react"; // Ícones para upload e status
+import { Loader2, UploadCloud, XCircle } from "lucide-react";
 import Image from "next/image";
 
 interface ImageUploadProps {
@@ -22,10 +22,11 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
   onRemove,
   disabled,
 }) => {
-  const [imageUrl, setImageUrl] = useState<string | null>(initialImageUrl);
+  const [imageUrl, setImageUrl] = useState<string | null>(initialImageUrl || null);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 🧩 Função de upload
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     setError(null);
     if (!event.target.files || event.target.files.length === 0) {
@@ -34,30 +35,29 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
     }
 
     const file = event.target.files[0];
-    const filePath = `${Date.now()}-${file.name}`; // Nome único para o arquivo
+    const filePath = `fotos/${Date.now()}-${file.name}`;
 
     setIsUploading(true);
 
     try {
-      const { data, error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from(bucketName)
-        .upload(filePath, file);
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: false,
+        });
 
-      if (uploadError) {
-        throw uploadError;
-      }
+      if (uploadError) throw uploadError;
 
-      // Obter URL pública
       const { data: publicUrlData } = supabase.storage
         .from(bucketName)
         .getPublicUrl(filePath);
 
-      if (!publicUrlData || !publicUrlData.publicUrl) {
-        throw new Error("Não foi possível obter a URL pública da imagem.");
-      }
+      const publicUrl = publicUrlData?.publicUrl;
+      if (!publicUrl) throw new Error("Não foi possível obter a URL pública da imagem.");
 
-      setImageUrl(publicUrlData.publicUrl);
-      onUploadSuccess(publicUrlData.publicUrl);
+      setImageUrl(publicUrl);
+      onUploadSuccess(publicUrl);
     } catch (err: any) {
       console.error("Erro no upload da imagem:", err);
       const errorMessage = err.message || "Erro desconhecido ao fazer upload.";
@@ -68,11 +68,10 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
     }
   };
 
+  // 🧩 Função de remoção
   const handleRemoveImage = () => {
     setImageUrl(null);
     onRemove?.();
-    // Poderíamos adicionar lógica para remover do Supabase Storage aqui também,
-    // mas por simplicidade, faremos isso no nível do formulário pai se necessário.
   };
 
   return (
@@ -82,9 +81,8 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
           <Image
             src={imageUrl}
             alt="Uploaded Image"
-            layout="fill"
-            objectFit="cover"
-            className="rounded-lg"
+            fill
+            className="object-cover rounded-lg"
           />
           {!disabled && (
             <button
@@ -106,8 +104,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
             isUploading || disabled
               ? "bg-gray-700 border-gray-600 text-gray-400 cursor-not-allowed"
               : "bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700 hover:border-[#D6C6AA]"
-          }
-        `}
+          }`}
       >
         {isUploading ? (
           <div className="flex items-center space-x-2">
@@ -117,9 +114,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
         ) : (
           <div className="flex items-center space-x-2">
             <UploadCloud className="w-5 h-5" />
-            <span>
-              {imageUrl ? "Mudar Imagem" : "Selecionar Imagem"}
-            </span>
+            <span>{imageUrl ? "Mudar Imagem" : "Selecionar Imagem"}</span>
           </div>
         )}
         <input

@@ -20,7 +20,7 @@ export default function Home() {
       <header className="flex justify-between items-center px-8 pt-8 md:px-16">
         {/* Logo */}
         <div className="flex items-center gap-2 select-none">
-          <span className="text-5xl font-serif font-bold text-[#D6C6AA] tracking-tight leading-none">MS</span>
+          <span className="text-5xl font-serif font-bold text-[#D6C6AA] tracking-tight leading-none">DP</span>
         </div>
         {/* Redes sociais */}
         <nav className="flex gap-4">

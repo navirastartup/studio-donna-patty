@@ -1,219 +1,420 @@
 "use client";
+
 import { useState, useEffect } from "react";
+import Link from "next/link";
+import Image from "next/image";
 import { supabase } from "@/lib/supabase";
-import { CheckCircle, XCircle, Clock, Eye } from "lucide-react";
+import { useLowStock } from "../LowStockContext";
+import {
+  CheckCircle,
+  XCircle,
+  Clock,
+  Eye,
+  Plus,
+  MessageCircle,
+  Trash2,
+  CalendarClock,
+} from "lucide-react";
 
 interface Appointment {
   id: string;
   start_time: string;
   end_time: string;
-  status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
-  payment_status: 'pending' | 'paid' | 'failed';
-  // Propriedades relacionais (virão de joins)
-  services: { name: string; price: number; };
-  professionals: { name: string; specialty: string; };
-  clients: { full_name: string; phone: string; email: string; };
+  status: "pending" | "confirmed" | "cancelled" | "completed";
+  payment_status: "pending" | "paid" | "failed";
+  services: { name: string; price: number } | null;
+  professionals: { name: string; specialty: string; image_url?: string } | null;
+  clients: { full_name: string; phone: string; email: string } | null;
 }
 
 export default function AdminAgendamentosPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filterStatus, setFilterStatus] = useState<string>('all'); // 'all', 'pending', 'confirmed', 'cancelled', 'completed'
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterProfessional, setFilterProfessional] = useState<string>("all");
+  const [professionals, setProfessionals] = useState<{ id: string; name: string }[]>([]);
+  const [reschedule, setReschedule] = useState<{ id: string; newDate: string }>({
+    id: "",
+    newDate: "",
+  });
+
+  const { clearNewAppointments } = useLowStock();
+
+  useEffect(() => {
+    clearNewAppointments();
+  }, []);
 
   useEffect(() => {
     fetchAppointments();
-  }, [filterStatus]);
+    fetchProfessionals();
+
+    const channel = supabase
+      .channel("realtime-appointments")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "appointments" },
+        (payload) => {
+          setAppointments((prev) => [payload.new as any, ...prev]);
+          showNotification("💅 Novo agendamento recebido!");
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [filterStatus, filterProfessional]);
+
+  const showNotification = (message: string) => {
+    const toast = document.createElement("div");
+    toast.className =
+      "fixed bottom-4 right-4 bg-[#D6C6AA] text-black px-5 py-3 rounded-lg shadow-lg animate-fadeIn";
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+  };
+
+  async function fetchProfessionals() {
+    const { data } = await supabase.from("professionals").select("id, name").order("name");
+    setProfessionals(data || []);
+  }
 
   async function fetchAppointments() {
     setLoading(true);
     setError(null);
 
-    let query = supabase
-      .from('appointments')
-      .select(`
-        id,
-        start_time,
-        end_time,
-        status,
-        payment_status,
-        services (name, price),
-        professionals (name, specialty),
-        clients (full_name, phone, email)
-      `)
-      .order('start_time', { ascending: false });
+    try {
+      let query = supabase
+        .from("appointments")
+        .select(`
+          id,
+          start_time,
+          end_time,
+          status,
+          payment_status,
+          services:service_id (name, price),
+          professionals:professional_id (name, specialty, image_url),
+          clients:client_id (full_name, phone, email)
+        `)
+        .order("start_time", { ascending: false });
 
-    if (filterStatus !== 'all') {
-      query = query.eq('status', filterStatus);
+      if (filterStatus !== "all") query = query.eq("status", filterStatus);
+      if (filterProfessional !== "all")
+        query = query.eq("professional_id", filterProfessional);
+
+      const { data, error } = await query;
+      if (error) throw error;
+      setAppointments(
+        (data || []).map((item: any) => ({
+          ...item,
+          services: Array.isArray(item.services) ? item.services[0] : item.services,
+          professionals: Array.isArray(item.professionals)
+            ? item.professionals[0]
+            : item.professionals,
+          clients: Array.isArray(item.clients) ? item.clients[0] : item.clients,
+        }))
+      );
+    } catch (err: any) {
+      console.error("Erro ao buscar agendamentos:", err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
-
-    const { data, error } = await query;
-
-    if (error) {
-      console.error("Erro ao buscar agendamentos:", error);
-      setError(error.message);
-    } else {
-      setAppointments(data as Appointment[]);
-    }
-    setLoading(false);
   }
 
-  const updateAppointmentStatus = async (id: string, newStatus: Appointment['status']) => {
-    setError(null);
+  const updateAppointmentStatus = async (id: string, newStatus: Appointment["status"]) => {
+    try {
+      const res = await fetch("/api/admin/update-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, status: newStatus }),
+      });
+  
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao atualizar status");
+  
+      showNotification("✅ Status atualizado com sucesso!");
+      fetchAppointments(); // recarrega lista
+    } catch (err: any) {
+      console.error("Erro ao atualizar status:", err);
+      setError(err.message);
+    }
+  };  
+
+  const deleteAppointment = async (id: string) => {
+    if (!confirm("Deseja excluir este agendamento?")) return;
+    const { error } = await supabase.from("appointments").delete().eq("id", id);
+    if (!error) {
+      showNotification("🗑️ Agendamento excluído!");
+      fetchAppointments();
+    }
+  };
+
+  const rescheduleAppointment = async () => {
+    if (!reschedule.id || !reschedule.newDate) return;
     const { error } = await supabase
-      .from('appointments')
-      .update({ status: newStatus })
-      .eq('id', id);
-
-    if (error) {
-      console.error("Erro ao atualizar status:", error);
-      setError(error.message);
-    } else {
-      fetchAppointments(); // Recarrega os agendamentos
+      .from("appointments")
+      .update({ start_time: reschedule.newDate })
+      .eq("id", reschedule.id);
+    if (!error) {
+      showNotification("📅 Agendamento reagendado!");
+      setReschedule({ id: "", newDate: "" });
+      fetchAppointments();
     }
   };
 
-  const getStatusColor = (status: Appointment['status']) => {
+  const clearCompletedAppointments = async () => {
+    if (!confirm("Excluir todos os agendamentos concluídos?")) return;
+    const { error } = await supabase.from("appointments").delete().eq("status", "completed");
+    if (!error) showNotification("🧹 Concluídos removidos!");
+    fetchAppointments();
+  };
+
+  const getStatusColor = (status: Appointment["status"]) => {
     switch (status) {
-      case 'pending': return 'text-yellow-500';
-      case 'confirmed': return 'text-green-500';
-      case 'cancelled': return 'text-red-500';
-      case 'completed': return 'text-blue-500';
-      default: return 'text-gray-400';
+      case "pending":
+        return "text-yellow-400";
+      case "confirmed":
+        return "text-green-400";
+      case "cancelled":
+        return "text-red-400";
+      case "completed":
+        return "text-blue-400";
+      default:
+        return "text-gray-400";
     }
   };
 
-  if (loading) return <p className="text-[#D6C6AA]">Carregando agendamentos...</p>;
-  if (error) return <p className="text-red-500">Erro: {error}</p>;
+  if (loading) return <p className="text-[#D6C6AA] p-6">Carregando agendamentos...</p>;
+  if (error) return <p className="text-red-500 p-6">Erro: {error}</p>;
 
   return (
     <div className="p-6">
-      <h2 className="text-3xl font-bold text-[#D6C6AA] mb-8">Gerenciar Agendamentos</h2>
+      {/* HEADER */}
+      <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-3">
+        <h2 className="text-3xl font-bold text-[#D6C6AA]">Gerenciar Agendamentos</h2>
+        <div className="flex gap-3">
+          <Link
+            href="/admin/agendamentos/novo"
+            className="flex items-center gap-2 bg-[#D6C6AA] text-black font-medium px-5 py-2 rounded-lg hover:opacity-90 transition"
+          >
+            <Plus className="w-5 h-5" /> Novo agendamento
+          </Link>
 
-      {/* Filtros de Status */}
-      <div className="mb-6 flex gap-4">
-        <button
-          onClick={() => setFilterStatus('all')}
-          className={`px-4 py-2 rounded-lg font-semibold transition-colors
-            ${filterStatus === 'all' ? 'bg-[#D6C6AA] text-black' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-        >
-          Todos
-        </button>
-        <button
-          onClick={() => setFilterStatus('pending')}
-          className={`px-4 py-2 rounded-lg font-semibold transition-colors
-            ${filterStatus === 'pending' ? 'bg-yellow-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-        >
-          Pendentes
-        </button>
-        <button
-          onClick={() => setFilterStatus('confirmed')}
-          className={`px-4 py-2 rounded-lg font-semibold transition-colors
-            ${filterStatus === 'confirmed' ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-        >
-          Confirmados
-        </button>
-        <button
-          onClick={() => setFilterStatus('cancelled')}
-          className={`px-4 py-2 rounded-lg font-semibold transition-colors
-            ${filterStatus === 'cancelled' ? 'bg-red-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-        >
-          Cancelados
-        </button>
-        <button
-          onClick={() => setFilterStatus('completed')}
-          className={`px-4 py-2 rounded-lg font-semibold transition-colors
-            ${filterStatus === 'completed' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-        >
-          Concluídos
-        </button>
+          <button
+            onClick={clearCompletedAppointments}
+            className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition"
+          >
+            🧹 Limpar Concluídos
+          </button>
+        </div>
       </div>
 
+      {/* FILTROS */}
+      <div className="mb-6 flex flex-wrap gap-4 items-center">
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+          className="bg-gray-800 text-gray-200 px-4 py-2 rounded-lg"
+        >
+          <option value="all">Todos os status</option>
+          <option value="pending">Pendentes</option>
+          <option value="confirmed">Confirmados</option>
+          <option value="cancelled">Cancelados</option>
+          <option value="completed">Concluídos</option>
+        </select>
+
+        <select
+          value={filterProfessional}
+          onChange={(e) => setFilterProfessional(e.target.value)}
+          className="bg-gray-800 text-gray-200 px-4 py-2 rounded-lg"
+        >
+          <option value="all">Todos os profissionais</option>
+          {professionals.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* TABELA */}
       {appointments.length === 0 ? (
-        <p className="text-gray-400">Nenhum agendamento encontrado para este status.</p>
+        <p className="text-gray-400">Nenhum agendamento encontrado.</p>
       ) : (
-        <div className="bg-gray-800 rounded-lg shadow-md overflow-hidden">
+        <div className="bg-gray-900 rounded-lg shadow-md overflow-hidden">
           <table className="min-w-full divide-y divide-gray-700">
-            <thead className="bg-gray-700">
+            <thead className="bg-gray-800">
               <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Cliente</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Profissional</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Serviço</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Data e Hora</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Status</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Pagamento</th>
-                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Ações</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">
+                  Cliente
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">
+                  Profissional
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">
+                  Serviço
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">
+                  Data e hora
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">
+                  Status
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">
+                  Pagamento
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase">
+                  Ações
+                </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-700">
-              {appointments.map((appt) => (
-                <tr key={appt.id} className="hover:bg-gray-700 transition-colors">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-white">{appt.clients?.full_name}</div>
-                    <div className="text-sm text-gray-400">{appt.clients?.email}</div>
-                    <div className="text-sm text-gray-500">{appt.clients?.phone}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-white">{appt.professionals?.name}</div>
-                    <div className="text-sm text-gray-400">{appt.professionals?.specialty}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-white">{appt.services?.name}</div>
-                    <div className="text-sm text-gray-400">R$ {appt.services?.price?.toFixed(2).replace('.', ',')}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                    {new Date(appt.start_time).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 text-xs font-semibold leading-5 rounded-full ${getStatusColor(appt.status)}`}>
-                      {appt.status.charAt(0).toUpperCase() + appt.status.slice(1)}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                    {appt.payment_status.charAt(0).toUpperCase() + appt.payment_status.slice(1)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="flex justify-end gap-2">
-                      <button
-                        onClick={() => alert("Visualizar detalhes do agendamento " + appt.id)}
-                        className="text-blue-500 hover:text-blue-700 transition-colors"
-                        title="Ver Detalhes"
+            <tbody className="divide-y divide-gray-800">
+              {appointments.map((appt) => {
+                const service = appt.services;
+                const professional = appt.professionals;
+                const client = appt.clients;
+
+                return (
+                  <tr key={appt.id} className="hover:bg-gray-800 transition-colors">
+                    {/* Cliente */}
+                    <td className="px-6 py-4">
+                      <div className="text-white font-medium flex items-center gap-2">
+                        {client?.full_name}
+                        {client?.phone && (
+                          <a
+                            href={`https://wa.me/55${client.phone.replace(/\D/g, "")}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-green-400 hover:text-green-500"
+                            title="Conversar no WhatsApp"
+                          >
+                            <MessageCircle className="w-4 h-4" />
+                          </a>
+                        )}
+                      </div>
+                      <div className="text-sm text-gray-400">{client?.email}</div>
+                      <div className="text-sm text-gray-500">{client?.phone}</div>
+                    </td>
+
+                    {/* Profissional */}
+                    <td className="px-6 py-4 flex items-center gap-3">
+                      {professional?.image_url ? (
+                        <Image
+                          src={professional.image_url}
+                          alt={professional.name}
+                          width={32}
+                          height={32}
+                          className="rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-gray-700" />
+                      )}
+                      <div>
+                        <div className="text-white font-medium">{professional?.name}</div>
+                        <div className="text-sm text-gray-400">{professional?.specialty}</div>
+                      </div>
+                    </td>
+
+                    {/* Serviço */}
+                    <td className="px-6 py-4">
+                      <div className="text-white font-medium">{service?.name}</div>
+                      <div className="text-sm text-gray-400">
+                        R$ {service?.price?.toFixed(2).replace(".", ",")}
+                      </div>
+                    </td>
+
+                    {/* Data e hora */}
+                    <td className="px-6 py-4 text-gray-300">
+                      {new Date(appt.start_time).toLocaleString("pt-BR", {
+                        dateStyle: "short",
+                        timeStyle: "short",
+                      })}
+                    </td>
+
+                    {/* Status */}
+                    <td className="px-6 py-4">
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(
+                          appt.status
+                        )}`}
                       >
-                        <Eye className="w-5 h-5" />
-                      </button>
-                      {appt.status === 'pending' && (
+                        {appt.status.charAt(0).toUpperCase() + appt.status.slice(1)}
+                      </span>
+                    </td>
+
+                    {/* Pagamento */}
+                    <td className="px-6 py-4 text-gray-300">
+                      {["pago", "paid"].includes(appt.payment_status)
+                        ? "Pago"
+                        : ["pendente", "pending"].includes(appt.payment_status)
+                        ? "Pendente"
+                        : "Falhou"}
+                    </td>
+
+                    {/* Ações */}
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex justify-end gap-2">
                         <button
-                          onClick={() => updateAppointmentStatus(appt.id, 'confirmed')}
-                          className="text-green-500 hover:text-green-700 transition-colors"
-                          title="Confirmar Agendamento"
+                          onClick={() => setReschedule({ id: appt.id, newDate: "" })}
+                          className="text-yellow-400 hover:text-yellow-600"
+                          title="Reagendar"
                         >
-                          <CheckCircle className="w-5 h-5" />
+                          <CalendarClock className="w-5 h-5" />
                         </button>
-                      )}
-                      {appt.status === 'pending' && (
+
                         <button
-                          onClick={() => updateAppointmentStatus(appt.id, 'cancelled')}
-                          className="text-red-500 hover:text-red-700 transition-colors"
-                          title="Cancelar Agendamento"
-                        >
-                          <XCircle className="w-5 h-5" />
-                        </button>
-                      )}
-                      {(appt.status === 'confirmed' || appt.status === 'pending') && (
-                        <button
-                          onClick={() => updateAppointmentStatus(appt.id, 'completed')}
-                          className="text-blue-500 hover:text-blue-700 transition-colors"
-                          title="Marcar como Concluído"
+                          onClick={() => updateAppointmentStatus(appt.id, "completed")}
+                          className="text-blue-400 hover:text-blue-600"
+                          title="Concluir"
                         >
                           <Clock className="w-5 h-5" />
                         </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+
+                        <button
+                          onClick={() => deleteAppointment(appt.id)}
+                          className="text-red-500 hover:text-red-700"
+                          title="Excluir"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* MODAL DE REAGENDAMENTO */}
+      {reschedule.id && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-900 p-6 rounded-lg border border-gray-700 w-[90%] max-w-sm">
+            <h3 className="text-xl font-bold text-[#D6C6AA] mb-4">Reagendar</h3>
+            <input
+              type="datetime-local"
+              value={reschedule.newDate}
+              onChange={(e) => setReschedule({ ...reschedule, newDate: e.target.value })}
+              className="w-full px-4 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white mb-4"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setReschedule({ id: "", newDate: "" })}
+                className="bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-600"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={rescheduleAppointment}
+                className="bg-[#D6C6AA] text-black px-4 py-2 rounded-lg hover:bg-[#e8dcbf]"
+              >
+                Salvar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
