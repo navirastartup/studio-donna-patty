@@ -1,49 +1,49 @@
-export async function sendWhatsAppConfirmation(
-    phone: string,
-    name: string,
-    date: string,
-    time: string,
-    service: string
-  ) {
-    try {
-      // Normalizar número
-      let formatted = phone.replace(/\D/g, ""); // remove tudo que não é número
-  
-      // Remove DDI duplicado
-      if (formatted.startsWith("55")) {
-        formatted = formatted.slice(2);
-      }
-  
-      const fullPhone = `+55${formatted}`; // Formato final garantido
-  
-      const message = `✅ Olá ${name}! Seu agendamento para *${service}* foi confirmado.
-  📅 Data: ${date}
-  ⏰ Horário: ${time}
-  Nos vemos em breve!`;
-  
-      const payload = {
-        messaging_product: "whatsapp",
-        to: fullPhone,
-        type: "text",
-        text: { body: message }
-      };
-  
-      const res = await fetch(
-        `https://graph.facebook.com/v17.0/${process.env.WHATSAPP_PHONE_ID}/messages`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(payload)
-        }
-      );
-  
-      const json = await res.json();
-      console.log("📨 WhatsApp enviado:", json);
-    } catch (err) {
-      console.error("❌ Erro ao enviar WhatsApp:", err);
-    }
+const DEFAULT_COUNTRY_CODE = "55";
+
+function normalizeBrazilianNumber(raw: string): string {
+  const digits = raw?.replace(/\D/g, "") ?? "";
+  if (!digits) {
+    throw new Error("Número de telefone ausente para envio via WhatsApp.");
   }
-  
+
+  let withoutCountry = digits;
+  if (withoutCountry.startsWith(DEFAULT_COUNTRY_CODE)) {
+    withoutCountry = withoutCountry.slice(DEFAULT_COUNTRY_CODE.length);
+  }
+
+  if (withoutCountry.length < 10) {
+    throw new Error(`Número de telefone inválido: ${raw}`);
+  }
+
+  return `${DEFAULT_COUNTRY_CODE}${withoutCountry}`;
+}
+
+export async function sendWhatsAppConfirmation(
+  phone: string,
+  name: string,
+  date: string,
+  time: string,
+  service: string,
+): Promise<void> {
+  if (typeof window !== "undefined") {
+    console.warn("⚠️ Tentativa de enviar WhatsApp no client bloqueada.");
+    return;
+  }
+
+  try {
+    const { sendWhatsAppMessage } = await import("./whatsapp-bot.js");
+
+    const finalNumber = normalizeBrazilianNumber(phone);
+
+    const message =
+      `✅ Olá ${name}! Seu agendamento para *${service}* foi confirmado.\n` +
+      `📅 Data: ${date}\n` +
+      `⏰ Horário: ${time}\n` +
+      `Nos vemos em breve!`;
+
+    await sendWhatsAppMessage(finalNumber, message);
+  } catch (error) {
+    console.error("❌ Erro ao enviar WhatsApp via bot:", error);
+    throw error;
+  }
+}

@@ -1,17 +1,19 @@
 import { NextResponse } from "next/server";
+import fs from "fs";
+import path from "path";
+
+const STATUS_FILE_PATH = path.resolve("./public/whatsapp-status.json");
 
 export async function GET() {
   try {
-    const fs = require("fs");
-    const path = "./public/whatsapp-status.json";
-
-    if (!fs.existsSync(path)) {
+    if (!fs.existsSync(STATUS_FILE_PATH)) {
       return NextResponse.json({ connected: false });
     }
 
-    const data = JSON.parse(fs.readFileSync(path, "utf8"));
+    const data = JSON.parse(fs.readFileSync(STATUS_FILE_PATH, "utf8"));
     return NextResponse.json(data);
-  } catch {
+  } catch (error) {
+    console.error("❌ Erro ao ler status do WhatsApp:", error);
     return NextResponse.json({ connected: false });
   }
 }
