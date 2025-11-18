@@ -1,17 +1,13 @@
-const DEFAULT_COUNTRY_CODE = "55";
+export function normalizeBrazilianNumber(phone: string) {
+  let clean = phone.replace(/\D/g, "");
 
-function normalizeBrazilianNumber(raw: string): string {
-  const digits = raw?.replace(/\D/g, "") ?? "";
-  if (!digits) throw new Error("Número de telefone ausente.");
+  // Se começar com 0, remove
+  if (clean.startsWith("0")) clean = clean.substring(1);
 
-  // Remove código do país se já tiver
-  let num = digits.startsWith(DEFAULT_COUNTRY_CODE)
-    ? digits.slice(DEFAULT_COUNTRY_CODE.length)
-    : digits;
+  // Se não tiver DDI, adiciona
+  if (!clean.startsWith("55")) clean = "55" + clean;
 
-  if (num.length < 10) throw new Error(`Telefone inválido: ${raw}`);
-
-  return `${DEFAULT_COUNTRY_CODE}${num}`;
+  return clean;
 }
 
 export async function sendWhatsAppConfirmation(
@@ -20,8 +16,7 @@ export async function sendWhatsAppConfirmation(
   date: string,
   time: string,
   service: string
-): Promise<void> {
-  // Não deixa rodar no client
+) {
   if (typeof window !== "undefined") return;
 
   try {
@@ -40,15 +35,14 @@ Obrigada por escolher o *Studio Donna Patty* 💖
 Até breve!
 `;
 
-await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/whatsapp/send`,{
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ phone: cleaned, message }),
-});
+    await fetch(`${process.env.NEXT_PUBLIC_BOT_URL}/send-message`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone: cleaned, message }),
+    });
 
-
-    console.log("✅ WhatsApp enviado com sucesso!");
+    console.log("WhatsApp enviado");
   } catch (err) {
-    console.log("❌ Erro ao enviar WhatsApp:", err);
+    console.log("Erro ao enviar WhatsApp:", err);
   }
 }

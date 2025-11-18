@@ -553,29 +553,30 @@ export default function AdminConfiguracoesPage() {
       setBusyQR(true);
       setQrDataURL(null);
 
-      // verifica status
-      const statusRes = await fetch("/api/whatsapp/status");
-      if (statusRes.ok) {
-        const st = await statusRes.json();
-        setIsConnected(Boolean(st.connected));
-        setConnectedNumber(st.number || null);
-        if (st.connected) {
-          info("WhatsApp já conectado.");
-          return;
-        }
-      }
+// verifica status
+const statusRes = await fetch(`${process.env.NEXT_PUBLIC_BOT_URL}/status`);
+if (statusRes.ok) {
+  const st = await statusRes.json();
+  setIsConnected(Boolean(st.connected));
+  setConnectedNumber(st.number || null);
+  if (st.connected) {
+    info("WhatsApp já conectado.");
+    return;
+  }
+}
 
-      // busca QR
-      const res = await fetch("/api/whatsapp/qr");
-      if (!res.ok) {
-        fail("QR ainda não disponível. Inicie o bot do WhatsApp para gerar o QR.");
-        return;
-      }
-      const { qr } = await res.json();
-      if (!qr) {
-        fail("QR vazio. Reinicie o bot para gerar um novo QR.");
-        return;
-      }
+// busca QR
+const res = await fetch(`${process.env.NEXT_PUBLIC_BOT_URL}/qr`);
+if (!res.ok) {
+  fail("QR ainda não disponível. Inicie o bot do WhatsApp para gerar o QR.");
+  return;
+}
+
+const { qr } = await res.json();
+if (!qr) {
+  fail("QR vazio. Reinicie o bot para gerar um novo QR.");
+  return;
+}
 
       const QR = await import("qrcode");
       const dataUrl = await QR.toDataURL(qr, { margin: 1, scale: 6 });
@@ -591,7 +592,9 @@ export default function AdminConfiguracoesPage() {
 
   async function disconnectWhatsApp() {
     try {
-      const res = await fetch("/api/whatsapp/disconnect", { method: "POST" });
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BOT_URL}/disconnect`, {
+        method: "POST",
+      });      
       if (res.ok) {
         setIsConnected(false);
         setConnectedNumber(null);
@@ -610,7 +613,7 @@ export default function AdminConfiguracoesPage() {
     // Atualiza status ao abrir a aba integrações (ou na montagem)
     (async () => {
       try {
-        const res = await fetch("/api/whatsapp/status");
+        const res = await fetch(`${process.env.NEXT_PUBLIC_BOT_URL}/status`);
         if (res.ok) {
           const d = await res.json();
           setIsConnected(Boolean(d.connected));
