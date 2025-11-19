@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
-import { sendWhatsAppMessage } from "@/lib/whatsapp-bot";
 // ⚙️ Inicializa Resend
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -165,10 +164,12 @@ Link: ${linkAgendamento}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     `);
 
-await sendWhatsAppMessage(
-  whatsapp,
-  `Olá ${nomeCliente}! Seu agendamento foi confirmado.\n\n📅 ${data} às ${hora}\n💇‍♀️ ${servico}\n👩‍🎨 Profissional: ${profissional}\n\nVer detalhes: ${linkAgendamento}`
-);
+    async function sendWhatsAppMessageMock() {
+      console.log("📵 WhatsApp desativado no deploy — mock executado.");
+    }
+    
+    // substitui o bot REAL por um mock seguro para deploy
+const sendWhatsAppMessage = sendWhatsAppMessageMock;
 
 
     return NextResponse.json({ success: true, email });
