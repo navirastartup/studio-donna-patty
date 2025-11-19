@@ -34,11 +34,20 @@ export default function AdminAgendamentosPage() {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterProfessional, setFilterProfessional] = useState<string>("all");
   const [professionals, setProfessionals] = useState<{ id: string; name: string }[]>([]);
-  const [reschedule, setReschedule] = useState<{ id: string; newDate: string }>({
+  interface RescheduleState {
+    id: string;
+    newDate: string;
+    slots: string[];
+    selectedSlot: string;
+  }
+  
+  const [reschedule, setReschedule] = useState<RescheduleState>({
     id: "",
     newDate: "",
+    slots: [],
+    selectedSlot: "",
   });
-
+  
   const { clearNewAppointments } = useLowStock();
 
   useEffect(() => {
@@ -61,6 +70,8 @@ export default function AdminAgendamentosPage() {
       )
       .subscribe();
 
+
+      
     return () => {
       supabase.removeChannel(channel);
     };
@@ -162,15 +173,26 @@ export default function AdminAgendamentosPage() {
     fetchAppointments();
   };
   
+  const fetchAvailableSlots = async (date: string) => {
+    const res = await fetch("/api/appointments/available", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date }),
+    });
+  
+    const data = await res.json();
+    setReschedule((prev) => ({ ...prev, slots: data.available || [] }));
+  };
+
   const rescheduleAppointment = async () => {
-    if (!reschedule.id || !reschedule.newDate) return;
+    if (!reschedule.id || !reschedule.selectedSlot) return;
   
     const res = await fetch("/api/appointments/reschedule", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         id: reschedule.id,
-        newDate: reschedule.newDate,
+        newDate: reschedule.selectedSlot, // <- horário final
       }),
     });
   
@@ -182,10 +204,10 @@ export default function AdminAgendamentosPage() {
     }
   
     showNotification("📅 Reagendado!");
-    setReschedule({ id: "", newDate: "" });
+    setReschedule({ id: "", newDate: "", slots: [], selectedSlot: "" });
     fetchAppointments();
   };
-  
+    
 
   const clearCompletedAppointments = async () => {
     if (!confirm("Excluir todos os agendamentos concluídos?")) return;
@@ -298,7 +320,7 @@ export default function AdminAgendamentosPage() {
                 const service = appt.services;
                 const professional = appt.professionals;
                 const client = appt.clients;
-
+                
                 return (
                   <tr key={appt.id} className="hover:bg-gray-800 transition-colors">
                     {/* Cliente */}
@@ -379,13 +401,20 @@ export default function AdminAgendamentosPage() {
                     {/* Ações */}
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2">
-                        <button
-                          onClick={() => setReschedule({ id: appt.id, newDate: "" })}
-                          className="text-yellow-400 hover:text-yellow-600"
-                          title="Reagendar"
-                        >
-                          <CalendarClock className="w-5 h-5" />
-                        </button>
+                      <button
+  onClick={() =>
+    setReschedule({
+      id: appt.id,
+      newDate: "",
+      slots: [],
+      selectedSlot: ""
+    })
+  }
+  className="text-yellow-400 hover:text-yellow-600"
+  title="Reagendar"
+>
+  <CalendarClock className="w-5 h-5" />
+</button>
 
                         <button
                           onClick={() => updateAppointmentStatus(appt.id, "completed")}
@@ -414,28 +443,67 @@ export default function AdminAgendamentosPage() {
 
       {/* MODAL DE REAGENDAMENTO */}
       {reschedule.id && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-gray-900 p-6 rounded-lg border border-gray-700 w-[90%] max-w-sm">
-            <h3 className="text-xl font-bold text-[#D6C6AA] mb-4">Reagendar</h3>
-            <input
-              type="datetime-local"
-              value={reschedule.newDate}
-              onChange={(e) => setReschedule({ ...reschedule, newDate: e.target.value })}
-              className="w-full px-4 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white mb-4"
-            />
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setReschedule({ id: "", newDate: "" })}
-                className="bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-600"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={rescheduleAppointment}
-                className="bg-[#D6C6AA] text-black px-4 py-2 rounded-lg hover:bg-[#e8dcbf]"
-              >
-                Salvar
-              </button>
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div className="bg-gray-900 p-6 rounded-lg border border-gray-700 w-[90%] max-w-sm">
+      
+      <h3 className="text-xl font-bold text-[#D6C6AA] mb-4">Reagendar</h3>
+
+      {/* DATA */}
+      <input
+        type="date"
+        value={reschedule.newDate}
+        onChange={(e) => {
+          const newDate = e.target.value;
+          setReschedule({ ...reschedule, newDate });
+
+          fetchAvailableSlots(newDate);
+        }}
+        className="w-full px-4 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white mb-4"
+      />
+
+      {/* HORÁRIOS DISPONÍVEIS */}
+      {reschedule.slots && (
+        <div className="grid grid-cols-2 gap-2 mb-4">
+          {reschedule.slots.length === 0 && (
+            <p className="text-gray-400">Nenhum horário disponível</p>
+          )}
+
+          {reschedule.slots.map((slot) => (
+            <button
+              key={slot}
+              onClick={() => setReschedule({ ...reschedule, selectedSlot: slot })}
+              className={`px-3 py-2 rounded-lg border ${
+                reschedule.selectedSlot === slot
+                  ? "bg-[#D6C6AA] text-black"
+                  : "bg-gray-800 text-white border-gray-600"
+              }`}
+            >
+              {new Date(slot).toLocaleTimeString("pt-BR", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* BOTÕES */}
+      <div className="flex justify-end gap-2">
+        <button
+          onClick={() =>
+            setReschedule({ id: "", newDate: "", slots: [], selectedSlot: "" })
+          }
+          className="bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-600"
+        >
+          Cancelar
+        </button>
+        <button
+          disabled={!reschedule.selectedSlot}
+          onClick={rescheduleAppointment}
+          className="bg-[#D6C6AA] text-black px-4 py-2 rounded-lg hover:bg-[#e8dcbf] disabled:opacity-50"
+        >
+          Salvar
+        </button>
             </div>
           </div>
         </div>
