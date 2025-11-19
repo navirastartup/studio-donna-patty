@@ -6,14 +6,11 @@ import Image from "next/image";
 import { supabase } from "@/lib/supabase";
 import { useLowStock } from "../LowStockContext";
 import {
-  CheckCircle,
-  XCircle,
-  Clock,
-  Eye,
   Plus,
   MessageCircle,
   Trash2,
   CalendarClock,
+  Clock,
 } from "lucide-react";
 
 interface Appointment {
@@ -22,9 +19,23 @@ interface Appointment {
   end_time: string;
   status: "pending" | "confirmed" | "cancelled" | "completed";
   payment_status: "pending" | "paid" | "failed";
-  services: { name: string; price: number } | null;
-  professionals: { name: string; specialty: string; image_url?: string } | null;
+  services: { id: string; name: string; price: number } | null;
+  professionals: {
+    id: string;
+    name: string;
+    specialty: string;
+    image_url?: string;
+  } | null;
   clients: { full_name: string; phone: string; email: string } | null;
+}
+
+interface RescheduleState {
+  id: string;
+  newDate: string;
+  slots: string[];
+  selectedSlot: string;
+  professional_id: string;
+  service_id: string;
 }
 
 export default function AdminAgendamentosPage() {
@@ -34,30 +45,45 @@ export default function AdminAgendamentosPage() {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterProfessional, setFilterProfessional] = useState<string>("all");
   const [professionals, setProfessionals] = useState<{ id: string; name: string }[]>([]);
-  interface RescheduleState {
-    id: string;
-    newDate: string;
-    slots: string[];
-    selectedSlot: string;
-  }
-  
   const [reschedule, setReschedule] = useState<RescheduleState>({
     id: "",
     newDate: "",
     slots: [],
     selectedSlot: "",
+    professional_id: "",
+    service_id: "",
   });
-  
+
   const { clearNewAppointments } = useLowStock();
 
+  /* =========================================================
+   * Effects
+   * ======================================================= */
+
+  // limpar badge de novos agendamentos
   useEffect(() => {
     clearNewAppointments();
+  }, [clearNewAppointments]);
+
+  // carregar profissionais
+  useEffect(() => {
+    async function fetchProfessionals() {
+      const { data } = await supabase
+        .from("professionals")
+        .select("id, name")
+        .order("name");
+      setProfessionals(data || []);
+    }
+    fetchProfessionals();
   }, []);
 
+  // carregar agendamentos conforme filtros
   useEffect(() => {
     fetchAppointments();
-    fetchProfessionals();
+  }, [filterStatus, filterProfessional]);
 
+  // realtime de novos agendamentos
+  useEffect(() => {
     const channel = supabase
       .channel("realtime-appointments")
       .on(
@@ -65,31 +91,40 @@ export default function AdminAgendamentosPage() {
         { event: "INSERT", schema: "public", table: "appointments" },
         (payload) => {
           setAppointments((prev) => [payload.new as any, ...prev]);
+          playSound();
           showNotification("💅 Novo agendamento recebido!");
         }
       )
       .subscribe();
 
-
-      
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [filterStatus, filterProfessional]);
+  }, []);
+
+  /* =========================================================
+   * Helpers
+   * ======================================================= */
+
+  const playSound = () => {
+    try {
+      const audio = new Audio("/sounds/notify.mp3");
+      audio.play().catch(() => {
+        // usuário pode ter bloqueado autoplay; ignora erro
+      });
+    } catch {
+      // ignora
+    }
+  };
 
   const showNotification = (message: string) => {
     const toast = document.createElement("div");
     toast.className =
-      "fixed bottom-4 right-4 bg-[#D6C6AA] text-black px-5 py-3 rounded-lg shadow-lg animate-fadeIn";
+      "fixed bottom-4 right-4 bg-[#D6C6AA] text-black px-5 py-3 rounded-lg shadow-lg animate-fadeIn z-[9999]";
     toast.textContent = message;
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 3000);
   };
-
-  async function fetchProfessionals() {
-    const { data } = await supabase.from("professionals").select("id, name").order("name");
-    setProfessionals(data || []);
-  }
 
   async function fetchAppointments() {
     setLoading(true);
@@ -98,16 +133,18 @@ export default function AdminAgendamentosPage() {
     try {
       let query = supabase
         .from("appointments")
-        .select(`
+        .select(
+          `
           id,
           start_time,
           end_time,
           status,
           payment_status,
-          services:service_id (name, price),
-          professionals:professional_id (name, specialty, image_url),
+          services:service_id (id, name, price),
+          professionals:professional_id (id, name, specialty, image_url),
           clients:client_id (full_name, phone, email)
-        `)
+        `
+        )
         .order("start_time", { ascending: false });
 
       if (filterStatus !== "all") query = query.eq("status", filterStatus);
@@ -116,6 +153,7 @@ export default function AdminAgendamentosPage() {
 
       const { data, error } = await query;
       if (error) throw error;
+
       setAppointments(
         (data || []).map((item: any) => ({
           ...item,
@@ -134,84 +172,111 @@ export default function AdminAgendamentosPage() {
     }
   }
 
-  const updateAppointmentStatus = async (id: string, newStatus: Appointment["status"]) => {
+  const updateAppointmentStatus = async (
+    id: string,
+    newStatus: Appointment["status"]
+  ) => {
     try {
       const res = await fetch("/api/admin/update-status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, status: newStatus }),
       });
-  
+
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro ao atualizar status");
-  
+
       showNotification("✅ Status atualizado com sucesso!");
-      fetchAppointments(); // recarrega lista
+      fetchAppointments();
     } catch (err: any) {
       console.error("Erro ao atualizar status:", err);
       setError(err.message);
     }
-  };  
+  };
 
   const deleteAppointment = async (id: string) => {
     if (!confirm("Deseja excluir este agendamento?")) return;
-  
+
     const res = await fetch("/api/appointments/delete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
-  
+
     const data = await res.json();
-  
+
     if (!res.ok) {
+      console.error("Erro ao excluir agendamento:", data.error);
       showNotification("❌ Erro ao excluir!");
       return;
     }
-  
+
     showNotification("🗑️ Agendamento excluído!");
     fetchAppointments();
   };
-  
-  const fetchAvailableSlots = async (date: string) => {
-    const res = await fetch("/api/appointments/available", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date }),
-    });
-  
-    const data = await res.json();
-    setReschedule((prev) => ({ ...prev, slots: data.available || [] }));
+
+  const fetchAvailableSlots = async (
+    date: string,
+    professional_id: string,
+    service_id: string
+  ) => {
+    if (!date) return;
+
+    try {
+      const res = await fetch("/api/appointments/available", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, professional_id, service_id }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao buscar horários");
+
+      setReschedule((prev) => ({ ...prev, slots: data.available || [] }));
+    } catch (err) {
+      console.error(err);
+      setReschedule((prev) => ({ ...prev, slots: [] }));
+    }
   };
 
   const rescheduleAppointment = async () => {
     if (!reschedule.id || !reschedule.selectedSlot) return;
-  
+
     const res = await fetch("/api/appointments/reschedule", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         id: reschedule.id,
-        newDate: reschedule.selectedSlot, // <- horário final
+        newDate: reschedule.selectedSlot,
       }),
     });
-  
+
     const data = await res.json();
-  
+
     if (!res.ok) {
+      console.error("Erro ao reagendar:", data.error);
       showNotification("❌ Erro ao reagendar!");
       return;
     }
-  
+
     showNotification("📅 Reagendado!");
-    setReschedule({ id: "", newDate: "", slots: [], selectedSlot: "" });
+    setReschedule({
+      id: "",
+      newDate: "",
+      slots: [],
+      selectedSlot: "",
+      professional_id: "",
+      service_id: "",
+    });
     fetchAppointments();
   };
-    
 
   const clearCompletedAppointments = async () => {
     if (!confirm("Excluir todos os agendamentos concluídos?")) return;
-    const { error } = await supabase.from("appointments").delete().eq("status", "completed");
+    const { error } = await supabase
+      .from("appointments")
+      .delete()
+      .eq("status", "completed");
     if (!error) showNotification("🧹 Concluídos removidos!");
     fetchAppointments();
   };
@@ -231,14 +296,21 @@ export default function AdminAgendamentosPage() {
     }
   };
 
-  if (loading) return <p className="text-[#D6C6AA] p-6">Carregando agendamentos...</p>;
+  /* =========================================================
+   * Render
+   * ======================================================= */
+
+  if (loading)
+    return <p className="text-[#D6C6AA] p-6">Carregando agendamentos...</p>;
   if (error) return <p className="text-red-500 p-6">Erro: {error}</p>;
 
   return (
     <div className="p-6">
       {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-3">
-        <h2 className="text-3xl font-bold text-[#D6C6AA]">Gerenciar Agendamentos</h2>
+        <h2 className="text-3xl font-bold text-[#D6C6AA]">
+          Gerenciar Agendamentos
+        </h2>
         <div className="flex gap-3">
           <Link
             href="/admin/agendamentos/novo"
@@ -320,16 +392,22 @@ export default function AdminAgendamentosPage() {
                 const service = appt.services;
                 const professional = appt.professionals;
                 const client = appt.clients;
-                
+
                 return (
-                  <tr key={appt.id} className="hover:bg-gray-800 transition-colors">
+                  <tr
+                    key={appt.id}
+                    className="hover:bg-gray-800 transition-colors"
+                  >
                     {/* Cliente */}
                     <td className="px-6 py-4">
                       <div className="text-white font-medium flex items-center gap-2">
                         {client?.full_name}
                         {client?.phone && (
                           <a
-                            href={`https://wa.me/55${client.phone.replace(/\D/g, "")}`}
+                            href={`https://wa.me/55${client.phone.replace(
+                              /\D/g,
+                              ""
+                            )}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-green-400 hover:text-green-500"
@@ -339,8 +417,12 @@ export default function AdminAgendamentosPage() {
                           </a>
                         )}
                       </div>
-                      <div className="text-sm text-gray-400">{client?.email}</div>
-                      <div className="text-sm text-gray-500">{client?.phone}</div>
+                      <div className="text-sm text-gray-400">
+                        {client?.email}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {client?.phone}
+                      </div>
                     </td>
 
                     {/* Profissional */}
@@ -357,14 +439,20 @@ export default function AdminAgendamentosPage() {
                         <div className="w-8 h-8 rounded-full bg-gray-700" />
                       )}
                       <div>
-                        <div className="text-white font-medium">{professional?.name}</div>
-                        <div className="text-sm text-gray-400">{professional?.specialty}</div>
+                        <div className="text-white font-medium">
+                          {professional?.name}
+                        </div>
+                        <div className="text-sm text-gray-400">
+                          {professional?.specialty}
+                        </div>
                       </div>
                     </td>
 
                     {/* Serviço */}
                     <td className="px-6 py-4">
-                      <div className="text-white font-medium">{service?.name}</div>
+                      <div className="text-white font-medium">
+                        {service?.name}
+                      </div>
                       <div className="text-sm text-gray-400">
                         R$ {service?.price?.toFixed(2).replace(".", ",")}
                       </div>
@@ -385,7 +473,8 @@ export default function AdminAgendamentosPage() {
                           appt.status
                         )}`}
                       >
-                        {appt.status.charAt(0).toUpperCase() + appt.status.slice(1)}
+                        {appt.status.charAt(0).toUpperCase() +
+                          appt.status.slice(1)}
                       </span>
                     </td>
 
@@ -393,7 +482,9 @@ export default function AdminAgendamentosPage() {
                     <td className="px-6 py-4 text-gray-300">
                       {["pago", "paid"].includes(appt.payment_status)
                         ? "Pago"
-                        : ["pendente", "pending"].includes(appt.payment_status)
+                        : ["pendente", "pending"].includes(
+                            appt.payment_status
+                          )
                         ? "Pendente"
                         : "Falhou"}
                     </td>
@@ -401,29 +492,36 @@ export default function AdminAgendamentosPage() {
                     {/* Ações */}
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2">
-                      <button
-  onClick={() =>
-    setReschedule({
-      id: appt.id,
-      newDate: "",
-      slots: [],
-      selectedSlot: ""
-    })
-  }
-  className="text-yellow-400 hover:text-yellow-600"
-  title="Reagendar"
->
-  <CalendarClock className="w-5 h-5" />
-</button>
-
+                        {/* REAGENDAR */}
                         <button
-                          onClick={() => updateAppointmentStatus(appt.id, "completed")}
+                          onClick={() =>
+                            setReschedule({
+                              id: appt.id,
+                              newDate: "",
+                              slots: [],
+                              selectedSlot: "",
+                              professional_id: professional?.id || "",
+                              service_id: service?.id || "",
+                            })
+                          }
+                          className="text-yellow-400 hover:text-yellow-600"
+                          title="Reagendar"
+                        >
+                          <CalendarClock className="w-5 h-5" />
+                        </button>
+
+                        {/* CONCLUIR */}
+                        <button
+                          onClick={() =>
+                            updateAppointmentStatus(appt.id, "completed")
+                          }
                           className="text-blue-400 hover:text-blue-600"
                           title="Concluir"
                         >
                           <Clock className="w-5 h-5" />
                         </button>
 
+                        {/* EXCLUIR */}
                         <button
                           onClick={() => deleteAppointment(appt.id)}
                           className="text-red-500 hover:text-red-700"
@@ -443,67 +541,89 @@ export default function AdminAgendamentosPage() {
 
       {/* MODAL DE REAGENDAMENTO */}
       {reschedule.id && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-    <div className="bg-gray-900 p-6 rounded-lg border border-gray-700 w-[90%] max-w-sm">
-      
-      <h3 className="text-xl font-bold text-[#D6C6AA] mb-4">Reagendar</h3>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-900 p-6 rounded-lg border border-gray-700 w-[90%] max-w-sm">
+            <h3 className="text-xl font-bold text-[#D6C6AA] mb-4">
+              Reagendar
+            </h3>
 
-      {/* DATA */}
-      <input
-        type="date"
-        value={reschedule.newDate}
-        onChange={(e) => {
-          const newDate = e.target.value;
-          setReschedule({ ...reschedule, newDate });
+            {/* DATA */}
+            <input
+              type="date"
+              value={reschedule.newDate}
+              onChange={(e) => {
+                const newDate = e.target.value;
 
-          fetchAvailableSlots(newDate);
-        }}
-        className="w-full px-4 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white mb-4"
-      />
+                setReschedule((prev) => ({
+                  ...prev,
+                  newDate: newDate,
+                  selectedSlot: "",
+                }));
 
-      {/* HORÁRIOS DISPONÍVEIS */}
-      {reschedule.slots && (
-        <div className="grid grid-cols-2 gap-2 mb-4">
-          {reschedule.slots.length === 0 && (
-            <p className="text-gray-400">Nenhum horário disponível</p>
-          )}
+                fetchAvailableSlots(
+                  newDate,
+                  reschedule.professional_id,
+                  reschedule.service_id
+                );
+              }}
+              className="w-full px-4 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white mb-4"
+            />
 
-          {reschedule.slots.map((slot) => (
-            <button
-              key={slot}
-              onClick={() => setReschedule({ ...reschedule, selectedSlot: slot })}
-              className={`px-3 py-2 rounded-lg border ${
-                reschedule.selectedSlot === slot
-                  ? "bg-[#D6C6AA] text-black"
-                  : "bg-gray-800 text-white border-gray-600"
-              }`}
-            >
-              {new Date(slot).toLocaleTimeString("pt-BR", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </button>
-          ))}
-        </div>
-      )}
+            {/* HORÁRIOS DISPONÍVEIS */}
+            {reschedule.slots && (
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                {reschedule.slots.length === 0 && (
+                  <p className="text-gray-400">Nenhum horário disponível</p>
+                )}
 
-      {/* BOTÕES */}
-      <div className="flex justify-end gap-2">
-        <button
-          onClick={() =>
-            setReschedule({ id: "", newDate: "", slots: [], selectedSlot: "" })
-          }
-          className="bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-600"
-        >
-          Cancelar
-        </button>
-        <button
-          disabled={!reschedule.selectedSlot}
-          onClick={rescheduleAppointment}
-          className="bg-[#D6C6AA] text-black px-4 py-2 rounded-lg hover:bg-[#e8dcbf] disabled:opacity-50"
-        >
-          Salvar
-        </button>
+                {reschedule.slots.map((slot) => (
+                  <button
+                    key={slot}
+                    onClick={() =>
+                      setReschedule((prev) => ({
+                        ...prev,
+                        selectedSlot: slot,
+                      }))
+                    }
+                    className={`px-3 py-2 rounded-lg border ${
+                      reschedule.selectedSlot === slot
+                        ? "bg-[#D6C6AA] text-black"
+                        : "bg-gray-800 text-white border-gray-600"
+                    }`}
+                  >
+                    {new Date(slot).toLocaleTimeString("pt-BR", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* BOTÕES */}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() =>
+                  setReschedule({
+                    id: "",
+                    newDate: "",
+                    slots: [],
+                    selectedSlot: "",
+                    professional_id: "",
+                    service_id: "",
+                  })
+                }
+                className="bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-600"
+              >
+                Cancelar
+              </button>
+              <button
+                disabled={!reschedule.selectedSlot}
+                onClick={rescheduleAppointment}
+                className="bg-[#D6C6AA] text-black px-4 py-2 rounded-lg hover:bg-[#e8dcbf] disabled:opacity-50"
+              >
+                Salvar
+              </button>
             </div>
           </div>
         </div>
