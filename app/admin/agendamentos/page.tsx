@@ -144,25 +144,48 @@ export default function AdminAgendamentosPage() {
 
   const deleteAppointment = async (id: string) => {
     if (!confirm("Deseja excluir este agendamento?")) return;
-    const { error } = await supabase.from("appointments").delete().eq("id", id);
-    if (!error) {
-      showNotification("🗑️ Agendamento excluído!");
-      fetchAppointments();
+  
+    const res = await fetch("/api/appointments/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+  
+    const data = await res.json();
+  
+    if (!res.ok) {
+      showNotification("❌ Erro ao excluir!");
+      return;
     }
+  
+    showNotification("🗑️ Agendamento excluído!");
+    fetchAppointments();
   };
-
+  
   const rescheduleAppointment = async () => {
     if (!reschedule.id || !reschedule.newDate) return;
-    const { error } = await supabase
-      .from("appointments")
-      .update({ start_time: reschedule.newDate })
-      .eq("id", reschedule.id);
-    if (!error) {
-      showNotification("📅 Agendamento reagendado!");
-      setReschedule({ id: "", newDate: "" });
-      fetchAppointments();
+  
+    const res = await fetch("/api/appointments/reschedule", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: reschedule.id,
+        newDate: reschedule.newDate,
+      }),
+    });
+  
+    const data = await res.json();
+  
+    if (!res.ok) {
+      showNotification("❌ Erro ao reagendar!");
+      return;
     }
+  
+    showNotification("📅 Reagendado!");
+    setReschedule({ id: "", newDate: "" });
+    fetchAppointments();
   };
+  
 
   const clearCompletedAppointments = async () => {
     if (!confirm("Excluir todos os agendamentos concluídos?")) return;
