@@ -319,17 +319,15 @@ if (paymentPolicy === "none") {
       name: formData.nome,
       email: formData.email,
       phone: normalizePhone(formData.telefone),
-
-      // CORRETO E SEM FUSO
+  
       start_time: `${yyyy}-${mm2}-${dd2}T${hh2}:${min2}:00`,
       end_time: `${yyyy}-${mm2}-${dd2}T${endHStr}:${endMStr}:00`,
-
-      // infos adicionais
+  
       service: selectedService.name,
       service_id: selectedService.id,
       professional_id: selectedProfessional.id,
     }),
-  });
+  });  
 
   setBookingSuccess(true);
   setTimeout(() => router.push("/success"), 2000);
