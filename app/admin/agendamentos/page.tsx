@@ -56,6 +56,29 @@ export default function AdminAgendamentosPage() {
     service_id: "",
   });
 
+  function filterCurrentWeek(appointments: Appointment[]) {
+    const now = new Date();
+  
+    const dayOfWeek = now.getDay(); // 0 = domingo
+    const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  
+    // Segunda-feira
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - diffToMonday);
+    monday.setHours(0, 0, 0, 0);
+  
+    // Domingo
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
+  
+    return appointments.filter((appt) => {
+      const d = new Date(appt.start_time);
+      return d >= monday && d <= sunday;
+    });
+  }
+  
+
   function groupByWeekday(appointments: Appointment[]) {
     const days = [
       "Domingo",
@@ -210,16 +233,17 @@ export default function AdminAgendamentosPage() {
       const { data, error } = await query;
       if (error) throw error;
 
-      setAppointments(
-        (data || []).map((item: any) => ({
-          ...item,
-          services: Array.isArray(item.services) ? item.services[0] : item.services,
-          professionals: Array.isArray(item.professionals)
-            ? item.professionals[0]
-            : item.professionals,
-          clients: Array.isArray(item.clients) ? item.clients[0] : item.clients,
-        }))
-      );
+      const parsed = (data || []).map((item: any) => ({
+        ...item,
+        services: Array.isArray(item.services) ? item.services[0] : item.services,
+        professionals: Array.isArray(item.professionals)
+          ? item.professionals[0]
+          : item.professionals,
+        clients: Array.isArray(item.clients) ? item.clients[0] : item.clients,
+      }));
+      
+      setAppointments(filterCurrentWeek(parsed));
+      
     } catch (err: any) {
       console.error("Erro ao buscar agendamentos:", err);
       setError(err.message);
@@ -454,7 +478,7 @@ export default function AdminAgendamentosPage() {
         colSpan={7}
         className="px-6 py-3 text-[#D6C6AA] text-lg font-semibold tracking-wide"
       >
-        📅 {weekday}
+        📅 {weekday} — {new Date(appts[0].start_time).toLocaleDateString("pt-BR")}
       </td>
     </tr>
 
