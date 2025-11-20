@@ -57,6 +57,7 @@ export default function AdminAgendamentosPage() {
     service_id: "",
   });
   const [weekFilter, setWeekFilter] = useState<"current" | "next" | "all">("current");
+  const [activeDay, setActiveDay] = useState("Todos");
 
 
   function filterCurrentWeek(appointments: Appointment[]) {
@@ -418,7 +419,26 @@ export default function AdminAgendamentosPage() {
       return d >= monday && d <= sunday;
     });
   })();
-  
+  // 🔥 FILTRA PELA ABA SELECIONADA (TAB)
+const dayFilteredAppointments = (() => {
+  if (activeDay === "Todos") return filteredAppointments;
+
+  const days = [
+    "Domingo",
+    "Segunda-feira",
+    "Terça-feira",
+    "Quarta-feira",
+    "Quinta-feira",
+    "Sexta-feira",
+    "Sábado",
+  ];
+
+  return filteredAppointments.filter((appt) => {
+    const d = new Date(appt.start_time);
+    return days[d.getDay()] === activeDay;
+  });
+})();
+
 
   if (loading)
     return <p className="text-[#D6C6AA] p-6">Carregando agendamentos...</p>;
@@ -449,7 +469,6 @@ export default function AdminAgendamentosPage() {
       </div>
 
       {/* FILTROS */}
-
       <select
   value={weekFilter}
   onChange={(e) => setWeekFilter(e.target.value as any)}
@@ -488,10 +507,39 @@ export default function AdminAgendamentosPage() {
         </select>
       </div>
 
+{/* TABS POR DIA */}
+<div className="flex flex-wrap gap-2 mb-6">
+  {[
+    "Todos",
+    "Segunda-feira",
+    "Terça-feira",
+    "Quarta-feira",
+    "Quinta-feira",
+    "Sexta-feira",
+    "Sábado",
+    "Domingo",
+  ].map((day) => (
+    <button
+      key={day}
+      onClick={() => setActiveDay(day)} // <- precisa criar esse estado
+      className={`
+        px-4 py-2 rounded-lg text-sm font-medium border 
+        ${
+          activeDay === day
+            ? "bg-[#D6C6AA] text-black border-[#D6C6AA]"
+            : "bg-gray-800 text-gray-300 border-gray-700 hover:bg-gray-700"
+        }
+      `}
+    >
+      {day}
+    </button>
+  ))}
+</div>
+
       {/* TABELA */}
-      {appointments.length === 0 ? (
-        <p className="text-gray-400">Nenhum agendamento encontrado.</p>
-      ) : (
+      {dayFilteredAppointments.length === 0 ? (
+  <p className="text-gray-400">Nenhum agendamento encontrado.</p>
+) : (
         <div className="bg-gray-900 rounded-lg shadow-md overflow-hidden">
           <table className="min-w-full divide-y divide-gray-700">
             <thead className="bg-gray-800">
@@ -521,29 +569,34 @@ export default function AdminAgendamentosPage() {
             </thead>
             <tbody className="divide-y divide-gray-800">
 
-            {Object.entries(groupByWeekday(filteredAppointments)).map(([weekday, appts]) => (
+{Object.entries(groupByWeekday(dayFilteredAppointments))
+.map(([weekday, appts]) => (
   <React.Fragment key={weekday}>
-    
-    {/* Cabeçalho do dia */}
-    <tr className="bg-gray-800/40">
-  <td
-    colSpan={7}
-    className="px-6 py-3 text-[#D6C6AA] text-lg font-semibold tracking-wide flex items-center gap-2"
-  >
-    <CalendarDays className="w-5 h-5 text-[#D6C6AA]" />
-    {weekday} — {new Date(appts[0].start_time).toLocaleDateString("pt-BR")}
-  </td>
-</tr>
 
+    {/* --- HEADER DO DIA --- */}
+    <tr>
+      <td colSpan={7} className="px-6 py-4 bg-gray-950 border-y border-gray-800">
+        <div className="flex items-center gap-2">
+          <CalendarDays className="w-5 h-5 text-[#D6C6AA]" />
+          <span className="text-[#D6C6AA] font-semibold text-base">
+            {weekday}
+          </span>
 
-    {/* Agendamentos deste dia */}
+          <span className="text-gray-500 ml-2 text-sm">
+            {new Date(appts[0].start_time).toLocaleDateString("pt-BR")}
+          </span>
+        </div>
+      </td>
+    </tr>
+
+    {/* --- LISTA DE AGENDAMENTOS DO DIA --- */}
     {appts.map((appt) => {
       const service = appt.services;
       const professional = appt.professionals;
       const client = appt.clients;
 
       return (
-        <tr key={appt.id} className="hover:bg-gray-800 transition-colors">
+        <tr key={appt.id} className="hover:bg-gray-800/60 transition">
 
           {/* CLIENTE */}
           <td className="px-6 py-4">
@@ -556,14 +609,13 @@ export default function AdminAgendamentosPage() {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-green-400 hover:text-green-500"
-                  title="Conversar no WhatsApp"
                 >
                   <MessageCircle className="w-4 h-4" />
                 </a>
               )}
             </div>
-            <div className="text-sm text-gray-400">{client?.email}</div>
-            <div className="text-sm text-gray-500">{client?.phone}</div>
+            <p className="text-sm text-gray-400">{client?.email}</p>
+            <p className="text-sm text-gray-500">{client?.phone}</p>
           </td>
 
           {/* PROFISSIONAL */}
@@ -581,24 +633,20 @@ export default function AdminAgendamentosPage() {
             )}
 
             <div>
-              <div className="text-white font-medium">
-                {professional?.name}
-              </div>
-              <div className="text-sm text-gray-400">
-                {professional?.specialty}
-              </div>
+              <p className="text-white font-medium">{professional?.name}</p>
+              <p className="text-sm text-gray-400">{professional?.specialty}</p>
             </div>
           </td>
 
           {/* SERVIÇO */}
           <td className="px-6 py-4">
-            <div className="text-white font-medium">{service?.name}</div>
-            <div className="text-sm text-gray-400">
+            <p className="text-white font-medium">{service?.name}</p>
+            <p className="text-sm text-gray-400">
               R$ {service?.price?.toFixed(2).replace(".", ",")}
-            </div>
+            </p>
           </td>
 
-          {/* DATA E HORA */}
+          {/* DATA & HORA */}
           <td className="px-6 py-4 text-gray-300">
             {formatAppointmentDateTime(appt.start_time)}
           </td>
@@ -610,8 +658,7 @@ export default function AdminAgendamentosPage() {
                 appt.status
               )}`}
             >
-              {appt.status.charAt(0).toUpperCase() +
-                appt.status.slice(1)}
+              {appt.status.charAt(0).toUpperCase() + appt.status.slice(1)}
             </span>
           </td>
 
@@ -627,8 +674,6 @@ export default function AdminAgendamentosPage() {
           {/* AÇÕES */}
           <td className="px-6 py-4 text-right">
             <div className="flex justify-end gap-2">
-
-              {/* REAGENDAR */}
               <button
                 onClick={() =>
                   setReschedule({
@@ -641,39 +686,34 @@ export default function AdminAgendamentosPage() {
                   })
                 }
                 className="text-yellow-400 hover:text-yellow-600"
-                title="Reagendar"
               >
                 <CalendarClock className="w-5 h-5" />
               </button>
 
-              {/* CONCLUIR */}
               <button
                 onClick={() => updateAppointmentStatus(appt.id, "completed")}
                 className="text-blue-400 hover:text-blue-600"
-                title="Concluir"
               >
                 <Clock className="w-5 h-5" />
               </button>
 
-              {/* EXCLUIR */}
               <button
                 onClick={() => deleteAppointment(appt.id)}
                 className="text-red-500 hover:text-red-700"
-                title="Excluir"
               >
                 <Trash2 className="w-5 h-5" />
               </button>
-
             </div>
           </td>
-
         </tr>
       );
     })}
 
   </React.Fragment>
 ))}
+
 </tbody>
+
           </table>
         </div>
       )}
