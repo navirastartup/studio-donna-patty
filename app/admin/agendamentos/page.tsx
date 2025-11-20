@@ -12,6 +12,8 @@ import {
   CalendarClock,
   Clock,
 } from "lucide-react";
+import React from "react";
+
 
 interface Appointment {
   id: string;
@@ -53,6 +55,46 @@ export default function AdminAgendamentosPage() {
     professional_id: "",
     service_id: "",
   });
+
+  function groupByWeekday(appointments: Appointment[]) {
+    const days = [
+      "Domingo",
+      "Segunda-feira",
+      "Terça-feira",
+      "Quarta-feira",
+      "Quinta-feira",
+      "Sexta-feira",
+      "Sábado",
+    ];
+  
+    const groups: Record<string, Appointment[]> = {};
+  
+    appointments.forEach((appt) => {
+      const date = new Date(appt.start_time);
+      const weekday = days[date.getDay()];
+  
+      if (!groups[weekday]) groups[weekday] = [];
+      groups[weekday].push(appt);
+    });
+  
+    // Ordem correta dentro de cada dia
+    Object.keys(groups).forEach((day) => {
+      groups[day].sort(
+        (a, b) =>
+          new Date(a.start_time).getTime() -
+          new Date(b.start_time).getTime()
+      );
+    });
+  
+    // ordenar os dias da semana
+    const ordered: Record<string, Appointment[]> = {};
+    days.forEach((d) => {
+      if (groups[d]) ordered[d] = groups[d];
+    });
+  
+    return ordered;
+  }
+  
 
   function formatAppointmentDateTime(iso: string) {
     if (!iso) return "";
@@ -402,153 +444,158 @@ export default function AdminAgendamentosPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800">
-              {appointments.map((appt) => {
-                const service = appt.services;
-                const professional = appt.professionals;
-                const client = appt.clients;
 
-                return (
-                  <tr
-                    key={appt.id}
-                    className="hover:bg-gray-800 transition-colors"
-                  >
-                    {/* Cliente */}
-                    <td className="px-6 py-4">
-                      <div className="text-white font-medium flex items-center gap-2">
-                        {client?.full_name}
-                        {client?.phone && (
-                          <a
-                            href={`https://wa.me/55${client.phone.replace(
-                              /\D/g,
-                              ""
-                            )}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-green-400 hover:text-green-500"
-                            title="Conversar no WhatsApp"
-                          >
-                            <MessageCircle className="w-4 h-4" />
-                          </a>
-                        )}
-                      </div>
-                      <div className="text-sm text-gray-400">
-                        {client?.email}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        {client?.phone}
-                      </div>
-                    </td>
+{Object.entries(groupByWeekday(appointments)).map(([weekday, appts]) => (
+  <React.Fragment key={weekday}>
+    
+    {/* Cabeçalho do dia */}
+    <tr className="bg-gray-800/40">
+      <td
+        colSpan={7}
+        className="px-6 py-3 text-[#D6C6AA] text-lg font-semibold tracking-wide"
+      >
+        📅 {weekday}
+      </td>
+    </tr>
 
-                    {/* Profissional */}
-                    <td className="px-6 py-4 flex items-center gap-3">
-                      {professional?.image_url ? (
-                        <Image
-                          src={professional.image_url}
-                          alt={professional.name}
-                          width={32}
-                          height={32}
-                          className="rounded-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-8 h-8 rounded-full bg-gray-700" />
-                      )}
-                      <div>
-                        <div className="text-white font-medium">
-                          {professional?.name}
-                        </div>
-                        <div className="text-sm text-gray-400">
-                          {professional?.specialty}
-                        </div>
-                      </div>
-                    </td>
+    {/* Agendamentos deste dia */}
+    {appts.map((appt) => {
+      const service = appt.services;
+      const professional = appt.professionals;
+      const client = appt.clients;
 
-                    {/* Serviço */}
-                    <td className="px-6 py-4">
-                      <div className="text-white font-medium">
-                        {service?.name}
-                      </div>
-                      <div className="text-sm text-gray-400">
-                        R$ {service?.price?.toFixed(2).replace(".", ",")}
-                      </div>
-                    </td>
+      return (
+        <tr key={appt.id} className="hover:bg-gray-800 transition-colors">
 
-                    {/* Data e hora */}
-                    <td className="px-6 py-4 text-gray-300">
-                      {new Date(appt.start_time).toLocaleString("pt-BR", {
-                        dateStyle: "short",
-                        timeStyle: "short",
-                      })}
-                    </td>
+          {/* CLIENTE */}
+          <td className="px-6 py-4">
+            <div className="text-white font-medium flex items-center gap-2">
+              {client?.full_name}
 
-                    {/* Status */}
-                    <td className="px-6 py-4">
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(
-                          appt.status
-                        )}`}
-                      >
-                        {appt.status.charAt(0).toUpperCase() +
-                          appt.status.slice(1)}
-                      </span>
-                    </td>
+              {client?.phone && (
+                <a
+                  href={`https://wa.me/55${client.phone.replace(/\D/g, "")}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-green-400 hover:text-green-500"
+                  title="Conversar no WhatsApp"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                </a>
+              )}
+            </div>
+            <div className="text-sm text-gray-400">{client?.email}</div>
+            <div className="text-sm text-gray-500">{client?.phone}</div>
+          </td>
 
-                    {/* Pagamento */}
-                    <td className="px-6 py-4 text-gray-300">
-                      {["pago", "paid"].includes(appt.payment_status)
-                        ? "Pago"
-                        : ["pendente", "pending"].includes(
-                            appt.payment_status
-                          )
-                        ? "Pendente"
-                        : "Falhou"}
-                    </td>
+          {/* PROFISSIONAL */}
+          <td className="px-6 py-4 flex items-center gap-3">
+            {professional?.image_url ? (
+              <Image
+                src={professional.image_url}
+                alt={professional.name}
+                width={32}
+                height={32}
+                className="rounded-full object-cover"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-gray-700" />
+            )}
 
-                    {/* Ações */}
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-2">
-                        {/* REAGENDAR */}
-                        <button
-                          onClick={() =>
-                            setReschedule({
-                              id: appt.id,
-                              newDate: "",
-                              slots: [],
-                              selectedSlot: "",
-                              professional_id: professional?.id || "",
-                              service_id: service?.id || "",
-                            })
-                          }
-                          className="text-yellow-400 hover:text-yellow-600"
-                          title="Reagendar"
-                        >
-                          <CalendarClock className="w-5 h-5" />
-                        </button>
+            <div>
+              <div className="text-white font-medium">
+                {professional?.name}
+              </div>
+              <div className="text-sm text-gray-400">
+                {professional?.specialty}
+              </div>
+            </div>
+          </td>
 
-                        {/* CONCLUIR */}
-                        <button
-                          onClick={() =>
-                            updateAppointmentStatus(appt.id, "completed")
-                          }
-                          className="text-blue-400 hover:text-blue-600"
-                          title="Concluir"
-                        >
-                          <Clock className="w-5 h-5" />
-                        </button>
+          {/* SERVIÇO */}
+          <td className="px-6 py-4">
+            <div className="text-white font-medium">{service?.name}</div>
+            <div className="text-sm text-gray-400">
+              R$ {service?.price?.toFixed(2).replace(".", ",")}
+            </div>
+          </td>
 
-                        {/* EXCLUIR */}
-                        <button
-                          onClick={() => deleteAppointment(appt.id)}
-                          className="text-red-500 hover:text-red-700"
-                          title="Excluir"
-                        >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
+          {/* DATA E HORA */}
+          <td className="px-6 py-4 text-gray-300">
+            {formatAppointmentDateTime(appt.start_time)}
+          </td>
+
+          {/* STATUS */}
+          <td className="px-6 py-4">
+            <span
+              className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(
+                appt.status
+              )}`}
+            >
+              {appt.status.charAt(0).toUpperCase() +
+                appt.status.slice(1)}
+            </span>
+          </td>
+
+          {/* PAGAMENTO */}
+          <td className="px-6 py-4 text-gray-300">
+            {["pago", "paid"].includes(appt.payment_status)
+              ? "Pago"
+              : ["pendente", "pending"].includes(appt.payment_status)
+              ? "Pendente"
+              : "Falhou"}
+          </td>
+
+          {/* AÇÕES */}
+          <td className="px-6 py-4 text-right">
+            <div className="flex justify-end gap-2">
+
+              {/* REAGENDAR */}
+              <button
+                onClick={() =>
+                  setReschedule({
+                    id: appt.id,
+                    newDate: "",
+                    slots: [],
+                    selectedSlot: "",
+                    professional_id: professional?.id || "",
+                    service_id: service?.id || "",
+                  })
+                }
+                className="text-yellow-400 hover:text-yellow-600"
+                title="Reagendar"
+              >
+                <CalendarClock className="w-5 h-5" />
+              </button>
+
+              {/* CONCLUIR */}
+              <button
+                onClick={() => updateAppointmentStatus(appt.id, "completed")}
+                className="text-blue-400 hover:text-blue-600"
+                title="Concluir"
+              >
+                <Clock className="w-5 h-5" />
+              </button>
+
+              {/* EXCLUIR */}
+              <button
+                onClick={() => deleteAppointment(appt.id)}
+                className="text-red-500 hover:text-red-700"
+                title="Excluir"
+              >
+                <Trash2 className="w-5 h-5" />
+              </button>
+
+            </div>
+          </td>
+
+        </tr>
+      );
+    })}
+
+  </React.Fragment>
+))}
+</tbody>
           </table>
         </div>
       )}
