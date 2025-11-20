@@ -54,6 +54,20 @@ export default function AdminAgendamentosPage() {
     service_id: "",
   });
 
+  function formatAppointmentDateTime(iso: string) {
+    if (!iso) return "";
+  
+    const d = new Date(iso);
+    const localMs = d.getTime() - new Date().getTimezoneOffset() * 60000;
+    const local = new Date(localMs);
+  
+    return local.toLocaleString("pt-BR", {
+      dateStyle: "short",
+      timeStyle: "short",
+    });
+  }
+  
+
   const { clearNewAppointments } = useLowStock();
 
   /* =========================================================

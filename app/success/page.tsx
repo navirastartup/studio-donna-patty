@@ -34,7 +34,7 @@ export default function SuccessPage() {
         transition={{ delay: 0.2, duration: 0.6 }}
         className="text-[2.2rem] md:text-4xl font-semibold tracking-tight mb-3"
       >
-        Pagamento confirmado
+          Agendamento confirmado
       </motion.h1>
 
       <motion.p

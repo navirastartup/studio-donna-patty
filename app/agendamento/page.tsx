@@ -290,44 +290,37 @@ async function ensureClient(name: string, email: string, phone: string): Promise
 
 // SEM PAGAMENTO
 if (paymentPolicy === "none") {
-
   const yyyy = currentMonth.getFullYear();
   const mm2 = String(currentMonth.getMonth() + 1).padStart(2, "0");
   const dd2 = String(selectedDate).padStart(2, "0");
 
-  const [hh2, min2] = selectedTime.split(":");
+  // formato que você já usava: dd/mm/yyyy
+  const dateStr = `${dd2}/${mm2}/${yyyy}`;
 
-  // duração do serviço
-  const durationMinutes = Number(selectedService?.duration_minutes ?? 60);
-
-  // calcular horário final SEM usar Date()
-  let endH = Number(hh2);
-  let endM = Number(min2) + durationMinutes;
-
-  while (endM >= 60) {
-    endM -= 60;
-    endH += 1;
-  }
-
-  const endHStr = String(endH).padStart(2, "0");
-  const endMStr = String(endM).padStart(2, "0");
-
-  await fetch("/api/agendar", {
+  const res = await fetch("/api/agendar", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       name: formData.nome,
       email: formData.email,
       phone: normalizePhone(formData.telefone),
-  
-      start_time: `${yyyy}-${mm2}-${dd2}T${hh2}:${min2}:00`,
-      end_time: `${yyyy}-${mm2}-${dd2}T${endHStr}:${endMStr}:00`,
-  
+
+      date: dateStr,                 // ✅ agora bate com o route.ts
+      time: selectedTime,            // ✅ idem
       service: selectedService.name,
       service_id: selectedService.id,
       professional_id: selectedProfessional.id,
     }),
-  });  
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    console.error("Erro ao agendar:", data.error);
+    setError(data.error || "Erro ao criar agendamento.");
+    setLoading(false);
+    return;
+  }
 
   setBookingSuccess(true);
   setTimeout(() => router.push("/success"), 2000);
