@@ -13,6 +13,7 @@ import {
   Clock,
 } from "lucide-react";
 import React from "react";
+import { CalendarDays } from "lucide-react";
 
 
 interface Appointment {
@@ -55,6 +56,8 @@ export default function AdminAgendamentosPage() {
     professional_id: "",
     service_id: "",
   });
+  const [weekFilter, setWeekFilter] = useState<"current" | "next" | "all">("current");
+
 
   function filterCurrentWeek(appointments: Appointment[]) {
     const now = new Date();
@@ -181,6 +184,30 @@ export default function AdminAgendamentosPage() {
     };
   }, []);
 
+  function getWeekRange(type: "current" | "next") {
+    const now = new Date();
+    const day = now.getDay();
+    const diffToMonday = day === 0 ? 6 : day - 1;
+  
+    // Segunda da semana atual
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - diffToMonday);
+    monday.setHours(0, 0, 0, 0);
+  
+    // Domingo da semana atual
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
+  
+    if (type === "next") {
+      monday.setDate(monday.getDate() + 7);
+      sunday.setDate(sunday.getDate() + 7);
+    }
+  
+    return { monday, sunday };
+  }
+  
+
   /* =========================================================
    * Helpers
    * ======================================================= */
@@ -242,7 +269,8 @@ export default function AdminAgendamentosPage() {
         clients: Array.isArray(item.clients) ? item.clients[0] : item.clients,
       }));
       
-      setAppointments(filterCurrentWeek(parsed));
+      setAppointments(parsed);
+
       
     } catch (err: any) {
       console.error("Erro ao buscar agendamentos:", err);
@@ -380,6 +408,18 @@ export default function AdminAgendamentosPage() {
    * Render
    * ======================================================= */
 
+  const filteredAppointments = (() => {
+    if (weekFilter === "all") return appointments;
+  
+    const { monday, sunday } = getWeekRange(weekFilter);
+  
+    return appointments.filter((appt) => {
+      const d = new Date(appt.start_time);
+      return d >= monday && d <= sunday;
+    });
+  })();
+  
+
   if (loading)
     return <p className="text-[#D6C6AA] p-6">Carregando agendamentos...</p>;
   if (error) return <p className="text-red-500 p-6">Erro: {error}</p>;
@@ -409,6 +449,18 @@ export default function AdminAgendamentosPage() {
       </div>
 
       {/* FILTROS */}
+
+      <select
+  value={weekFilter}
+  onChange={(e) => setWeekFilter(e.target.value as any)}
+  className="bg-gray-800 text-gray-200 px-4 py-2 rounded-lg"
+>
+  <option value="current">Semana atual</option>
+  <option value="next">Próxima semana</option>
+  <option value="all">Todos</option>
+</select>
+
+
       <div className="mb-6 flex flex-wrap gap-4 items-center">
         <select
           value={filterStatus}
@@ -469,18 +521,20 @@ export default function AdminAgendamentosPage() {
             </thead>
             <tbody className="divide-y divide-gray-800">
 
-{Object.entries(groupByWeekday(appointments)).map(([weekday, appts]) => (
+            {Object.entries(groupByWeekday(filteredAppointments)).map(([weekday, appts]) => (
   <React.Fragment key={weekday}>
     
     {/* Cabeçalho do dia */}
     <tr className="bg-gray-800/40">
-      <td
-        colSpan={7}
-        className="px-6 py-3 text-[#D6C6AA] text-lg font-semibold tracking-wide"
-      >
-        📅 {weekday} — {new Date(appts[0].start_time).toLocaleDateString("pt-BR")}
-      </td>
-    </tr>
+  <td
+    colSpan={7}
+    className="px-6 py-3 text-[#D6C6AA] text-lg font-semibold tracking-wide flex items-center gap-2"
+  >
+    <CalendarDays className="w-5 h-5 text-[#D6C6AA]" />
+    {weekday} — {new Date(appts[0].start_time).toLocaleDateString("pt-BR")}
+  </td>
+</tr>
+
 
     {/* Agendamentos deste dia */}
     {appts.map((appt) => {
