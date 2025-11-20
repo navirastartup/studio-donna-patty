@@ -1,31 +1,42 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 
+function makeLocalDate(date: string, time: string) {
+  const [y, m, d] = date.split("-").map(Number);
+  const [hh, mm] = time.split(":").map(Number);
+  return new Date(y, m - 1, d, hh, mm); // sem UTC
+}
+
 export async function POST(req: Request) {
   try {
     const { date, professional_id, service_id } = await req.json();
 
     if (!date || !service_id) {
-      return NextResponse.json({ error: "Data e serviço são obrigatórios" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Data e serviço são obrigatórios" },
+        { status: 400 }
+      );
     }
 
-    const day = new Date(date).getDay();
+    // Dia da semana sem bug de timezone
+    const [year, month, dayNum] = date.split("-").map(Number);
+    const day = new Date(year, month - 1, dayNum).getDay();
 
-    // 1 — Horário de funcionamento do salão
+    // 1 — Horário do salão
     const { data: schedule } = await supabase
       .from("schedules")
       .select("*")
       .eq("day_of_week", day)
       .single();
 
-    if (!schedule || !schedule.start_time || !schedule.end_time) {
+    if (!schedule) {
       return NextResponse.json({ available: [] });
     }
 
-    const open = schedule.start_time;  // "08:00"
-    const close = schedule.end_time;   // "18:00"
+    const open = schedule.start_time;  
+    const close = schedule.end_time;
 
-    // 2 — Buscar duração do serviço
+    // 2 — Duração do serviço
     const { data: service } = await supabase
       .from("services")
       .select("duration_minutes")
@@ -38,18 +49,24 @@ export async function POST(req: Request) {
 
     const duration = service.duration_minutes;
 
-    // 3 — Gerar possíveis horários (intervalo de 30 minutos)
-    const slots: string[] = [];
-    let current = new Date(`${date}T${open}`);
-    const limit = new Date(`${date}T${close}`);
+// 3 — Gerar horários usando horário local REAL
+const slots: string[] = [];
+let current = makeLocalDate(date, open);
+const limit = makeLocalDate(date, close);
 
-    while (current < limit) {
-      const finish = new Date(current.getTime() + duration * 60000);
-      if (finish <= limit) slots.push(current.toISOString());
-      current = new Date(current.getTime() + 30 * 60000);
-    }
+while (current < limit) {
+  const finish = new Date(current.getTime() + duration * 60000);
 
-    // 4 — Buscar horários ocupados do dia
+  if (finish <= limit) {
+    // **CORREÇÃO — sem UTC**
+    const hh = String(current.getHours()).padStart(2, "0");
+    const mm = String(current.getMinutes()).padStart(2, "0");
+    slots.push(`${hh}:${mm}`);
+  }
+
+  current = new Date(current.getTime() + 30 * 60000);
+}
+    // 4 — Buscar agendamentos existentes
     let query = supabase
       .from("appointments")
       .select("start_time, end_time, professional_id")
@@ -60,18 +77,18 @@ export async function POST(req: Request) {
 
     const { data: booked } = await query;
 
-    // 5 — Converter reservas em intervalos bloqueados
-    const blocked: { start: number; end: number }[] =
+    const blocked =
       booked?.map((b) => ({
         start: new Date(b.start_time).getTime(),
         end: new Date(b.end_time).getTime(),
       })) || [];
 
-    // 6 — Filtrar horários disponíveis
+    // 5 — Filtrar horários ocupados
     const available = slots.filter((slot) => {
       const start = new Date(slot).getTime();
       const end = start + duration * 60000;
 
+      // intervalo livre = NÃO colide com nenhum ocupado
       return !blocked.some((b) => !(end <= b.start || start >= b.end));
     });
 

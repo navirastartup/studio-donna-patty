@@ -288,55 +288,102 @@ async function ensureClient(name: string, email: string, phone: string): Promise
     const duration = Number(selectedService?.duration_minutes ?? 60);
     const endDate = new Date(startDate.getTime() + duration * 60000);
 
-    // SEM PAGAMENTO
-    if (paymentPolicy === "none") {
-      await fetch("/api/agendar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: formData.nome,
-          email: formData.email,
-          phone: normalizePhone(formData.telefone),
-          date: `${selectedDate}/${currentMonth.getMonth() + 1}/${currentMonth.getFullYear()}`,
-          time: selectedTime,
-          service: selectedService.name,
-          professional_id: selectedProfessional.id,
-        }),
-      });
+// SEM PAGAMENTO
+if (paymentPolicy === "none") {
 
-      setBookingSuccess(true);
-      setTimeout(() => router.push("/success"), 2000);
-      setLoading(false);
-      return;
-    }
+  const yyyy = currentMonth.getFullYear();
+  const mm2 = String(currentMonth.getMonth() + 1).padStart(2, "0");
+  const dd2 = String(selectedDate).padStart(2, "0");
 
-    // COM PAGAMENTO
-    const payload = {
-      serviceId: selectedService.id,
-      professionalId: selectedProfessional.id,
-      client: {
-        id: clientId,
-        name: formData.nome,
-        email: formData.email,
-        phone: normalizePhone(formData.telefone),
-      },
-      startTime: startDate.toISOString(),
-      endTime: endDate.toISOString(),
-      price: amountDue,
-      policy: paymentPolicy,
-    };
+  const [hh2, min2] = selectedTime.split(":");
 
-    const res = await fetch("/api/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const result = await res.json();
+  // duração do serviço
+  const durationMinutes = Number(selectedService?.duration_minutes ?? 60);
 
-    if (result.init_point) window.location.href = result.init_point;
-    else router.push("/success");
+  // calcular horário final SEM usar Date()
+  let endH = Number(hh2);
+  let endM = Number(min2) + durationMinutes;
 
-    setLoading(false);
+  while (endM >= 60) {
+    endM -= 60;
+    endH += 1;
+  }
+
+  const endHStr = String(endH).padStart(2, "0");
+  const endMStr = String(endM).padStart(2, "0");
+
+  await fetch("/api/agendar", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: formData.nome,
+      email: formData.email,
+      phone: normalizePhone(formData.telefone),
+
+      // CORRETO E SEM FUSO
+      start_time: `${yyyy}-${mm2}-${dd2}T${hh2}:${min2}:00`,
+      end_time: `${yyyy}-${mm2}-${dd2}T${endHStr}:${endMStr}:00`,
+
+      // infos adicionais
+      service: selectedService.name,
+      service_id: selectedService.id,
+      professional_id: selectedProfessional.id,
+    }),
+  });
+
+  setBookingSuccess(true);
+  setTimeout(() => router.push("/success"), 2000);
+  setLoading(false);
+  return;
+}
+
+   // COM PAGAMENTO
+
+const yyyy = currentMonth.getFullYear();
+const mm2 = String(currentMonth.getMonth() + 1).padStart(2, "0");
+const dd2 = String(selectedDate).padStart(2, "0");
+
+const [hh2, min2] = selectedTime.split(":");
+
+// calcular horário final SEM usar Date()
+let endH = Number(hh2);
+let endM = Number(min2) + duration;
+
+while (endM >= 60) {
+  endM -= 60;
+  endH += 1;
+}
+
+const endHStr = String(endH).padStart(2, "0");
+const endMStr = String(endM).padStart(2, "0");
+
+const payload = {
+  serviceId: selectedService.id,
+  professionalId: selectedProfessional.id,
+  client: {
+    id: clientId,
+    name: formData.nome,
+    email: formData.email,
+    phone: normalizePhone(formData.telefone),
+  },
+  startTime: `${yyyy}-${mm2}-${dd2}T${hh2}:${min2}:00`,
+  endTime: `${yyyy}-${mm2}-${dd2}T${endHStr}:${endMStr}:00`,
+  price: amountDue,
+  policy: paymentPolicy,
+};
+
+const res = await fetch("/api/checkout", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(payload),
+});
+
+const result = await res.json();
+
+if (result.init_point) window.location.href = result.init_point;
+else router.push("/success");
+
+setLoading(false);
   }
 
   const firstDayIndex = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1).getDay();
