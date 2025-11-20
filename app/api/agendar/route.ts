@@ -3,6 +3,18 @@ import { supabase } from "@/lib/supabase";
 import { sendEmailConfirmation } from "@/lib/notify-email";
 import { sendWhatsAppConfirmation } from "@/lib/notify-whatsapp";
 
+function toLocalTimestamp(dateString: string) {
+  const d = new Date(dateString);
+
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hours = String(d.getHours()).padStart(2, "0");
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+
+  return `${year}-${month}-${day} ${hours}:${minutes}:00`;
+}
+
 export async function POST(req: Request) {
   try {
     const {
@@ -20,7 +32,7 @@ export async function POST(req: Request) {
       throw new Error("Dados faltando para concluir o agendamento.");
     }
 
-    // --- CLIENTE ---
+    // CLIENTE
     const { data: existingClient } = await supabase
       .from("clients")
       .select("id")
@@ -40,12 +52,20 @@ export async function POST(req: Request) {
       client_id = newClient.id;
     }
 
-    // --- SALVAR SEM UTC ---
-    const formatLocal = (d: string) => d.replace("Z", "");
+    // Corrigir timezone corretamente
+    const start_local = toLocalTimestamp(start_time);
+    const end_local = toLocalTimestamp(end_time);
 
-    const start_local = formatLocal(start_time);
-    const end_local = formatLocal(end_time);
+    // Buscar nome correto do serviço no banco
+    const { data: svc } = await supabase
+      .from("services")
+      .select("name")
+      .eq("id", service_id)
+      .single();
 
+    const serviceName = svc?.name ?? service ?? "Serviço";
+
+    // SALVAR AGENDAMENTO
     const { error } = await supabase.from("appointments").insert({
       client_id,
       client_email: email,
@@ -55,14 +75,14 @@ export async function POST(req: Request) {
       end_time: end_local,
       status: "confirmed",
       payment_status: "pendente",
-      notes: `Agendado via site — ${service}`,
+      notes: `Agendado via site — ${serviceName}`,
     });
 
     if (error) throw error;
 
     await Promise.all([
-      sendEmailConfirmation(email, name, start_local.split("T")[0], start_local.split("T")[1], service),
-      sendWhatsAppConfirmation(phone, name, start_local.split("T")[0], start_local.split("T")[1], service),
+      sendEmailConfirmation(email, name, start_local.split(" ")[0], start_local.split(" ")[1], serviceName),
+      sendWhatsAppConfirmation(phone, name, start_local.split(" ")[0], start_local.split(" ")[1], serviceName),
     ]);
 
     return NextResponse.json({ ok: true });
