@@ -3,40 +3,43 @@ import { supabase } from "@/lib/supabase";
 import { sendEmailConfirmation } from "@/lib/notify-email";
 import { sendWhatsAppConfirmation } from "@/lib/notify-whatsapp";
 
-export async function POST(req: Request) {
-  try {
-    const { name, email, phone, date, time, service, professional_id } = await req.json();
-
-if (!professional_id) {
-  throw new Error("Profissional não informado no agendamento.");
+// --- Função: gerar horário sem UTC ---
+function makeLocalDate(date: string, time: string) {
+  const [y, m, d] = date.split("-").map(Number);
+  const [hh, mm] = time.split(":").map(Number);
+  return new Date(y, m - 1, d, hh, mm); // sem UTC
 }
 
-        // ✅ validações
-        if (!name || !email || !phone || !date || !time || !service || !professional_id) {
-            throw new Error("Dados faltando para concluir o agendamento.");
-          }
+export async function POST(req: Request) {
+  try {
+    const {
+      name,
+      email,
+      phone,
+      date,
+      time,
+      service,
+      professional_id,
+      service_id,
+    } = await req.json();
 
-    // 🔹 1. Garantir cliente existente ou criar novo
-    let client_id: string | null = null;
+    if (!name || !email || !phone || !date || !time || !service || !professional_id || !service_id) {
+      throw new Error("Dados faltando para concluir o agendamento.");
+    }
 
-    const { data: existingClient, error: findErr } = await supabase
+    // ----- 1. CLIENTE -----
+    const { data: existingClient } = await supabase
       .from("clients")
       .select("id")
       .eq("email", email)
       .maybeSingle();
 
-    if (findErr) throw findErr;
+    let client_id = existingClient?.id;
 
-    if (existingClient?.id) {
-      client_id = existingClient.id;
-    } else {
+    if (!client_id) {
       const { data: newClient, error: createErr } = await supabase
         .from("clients")
-        .insert({
-          full_name: name,
-          email,
-          phone,
-        })
+        .insert({ full_name: name, email, phone })
         .select("id")
         .single();
 
@@ -44,67 +47,46 @@ if (!professional_id) {
       client_id = newClient.id;
     }
 
-// 🔹 2. Montar horário
-console.log("📅 Dados recebidos do front:", { date, time });
+    // ----- 2. DATA NORMALIZADA -----
+    let normalizedDate = date;
 
-let normalizedDate = date;
+    if (date.includes("/")) {
+      const [day, month, year] = date.split("/");
+      normalizedDate = `${year}-${month.padStart(2,"0")}-${day.padStart(2,"0")}`;
+    }
 
-// Aceita "5/11/2025" → "2025-11-05" com zeros garantidos
-if (typeof date === "string") {
-  if (date.includes("/")) {
-    const [day, month, year] = date.split("/");
-    const dayPadded = day.padStart(2, "0");
-    const monthPadded = month.padStart(2, "0");
-    normalizedDate = `${year}-${monthPadded}-${dayPadded}`;
-  } else if (date.includes("-")) {
-    // se já vier ISO-like
-    normalizedDate = date;
-  } else {
-    throw new Error(`Formato de data inválido: ${date}`);
-  }
-} else {
-  throw new Error(`Tipo inesperado de data: ${typeof date}`);
-}
+    // ----- 3. HORÁRIO LOCAL SEM UTC -----
+    const startLocal = makeLocalDate(normalizedDate, time);
 
-const start_time = new Date(`${normalizedDate}T${time}:00`);
-const end_time = new Date(start_time.getTime() + 60 * 60 * 1000);
+    const duration = 60; // pode substituir depois
+    const endLocal = new Date(startLocal.getTime() + duration * 60000);
 
-if (isNaN(start_time.getTime())) {
-  console.error("❌ Data/hora inválida detectada:", {
-    rawDate: date,
-    normalizedDate,
-    time,
-  });
-  throw new Error("Data ou hora inválida recebida no agendamento.");
-}
+    const start_iso = startLocal.toISOString().slice(0, 19); // REMOVE O Z
+    const end_iso = endLocal.toISOString().slice(0, 19); // REMOVE O Z
 
-console.log("✅ Horário validado:", { start_time, end_time });
-
-
-    // 🔹 3. Inserir agendamento compatível com seu schema
+    // ----- 4. SALVAR NO BANCO -----
     const { error } = await supabase.from("appointments").insert({
-        client_id,
-        client_email: email,
-        professional_id,
-        start_time: start_time.toISOString(),
-        end_time: end_time.toISOString(),
-        service_id: null,
-        status: "confirmed",
-        payment_status: "pendente", // ✅ ATUALIZADO
-        notes: `Agendado via site — ${service}`,
-      });      
+      client_id,
+      client_email: email,
+      professional_id,
+      service_id,
+      start_time: start_iso, // agora SEM UTC
+      end_time: end_iso,     // agora SEM UTC
+      status: "confirmed",
+      payment_status: "pendente",
+      notes: `Agendado via site — ${service}`,
+    });
+
     if (error) throw error;
 
-    // 🔹 4. Enviar notificações (em paralelo)
+    // ----- 5. NOTIFICAÇÕES -----
     await Promise.all([
       sendEmailConfirmation(email, name, date, time, service),
       sendWhatsAppConfirmation(phone, name, date, time, service),
     ]);
 
-    return NextResponse.json({
-      ok: true,
-      message: "Agendamento confirmado e notificações enviadas.",
-    });
+    return NextResponse.json({ ok: true });
+    
   } catch (err: any) {
     console.error("Erro ao confirmar agendamento:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
