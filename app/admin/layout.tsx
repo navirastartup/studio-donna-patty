@@ -20,6 +20,10 @@ import {
 } from "lucide-react";
 import { LowStockProvider, useLowStock } from "./LowStockContext";
 import { Toaster } from "sonner";
+import  NotificationBell from "./NotificationBell";
+import { NotificationsProvider } from "./NotificationsContext";
+
+
 
 /* =========================================================
  * 🔹 Configuração do menu lateral
@@ -167,9 +171,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
                 </button>
               )}
 
-              <button className="relative inline-flex items-center justify-center w-10 h-10 rounded-xl bg-gray-900 border border-gray-800 hover:bg-[#101826] transition">
-                <Bell className="w-5 h-5 text-gray-300" />
-              </button>
+              <NotificationBell />
 
               <button className="inline-flex items-center gap-2 bg-gray-900 border border-gray-800 px-3 py-2 rounded-xl hover:bg-[#101826] transition">
                 <User className="w-5 h-5 text-gray-300" />
@@ -222,9 +224,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (!session) return null;
 
   return (
-    <LowStockProvider>
-      <Toaster richColors position="top-right" />
-      <LayoutContent>{children}</LayoutContent>
-    </LowStockProvider>
+<NotificationsProvider>
+  <LowStockProvider>
+    <Toaster richColors position="top-center" offset={20} />
+    <LayoutContent>{children}</LayoutContent>
+  </LowStockProvider>
+</NotificationsProvider>
   );
 }

@@ -6,7 +6,6 @@ import {
   Edit,
   Trash2,
   XCircle,
-  Clock,
   Search,
   ArrowUpDown,
 } from "lucide-react";
@@ -38,6 +37,7 @@ export default function AdminServicosPage() {
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [form, setForm] = useState({
@@ -45,9 +45,13 @@ export default function AdminServicosPage() {
     description: "",
     price: "",
     duration_minutes: "60",
-    discount_percent: "",
   });
   const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
+
+  // 🔹 Estado do modal de desconto
+  const [discountModalOpen, setDiscountModalOpen] = useState(false);
+  const [discountService, setDiscountService] = useState<Service | null>(null);
+  const [discountValue, setDiscountValue] = useState("");
 
   // filtros/ordenação
   const [searchTerm, setSearchTerm] = useState("");
@@ -85,7 +89,6 @@ export default function AdminServicosPage() {
       description: "",
       price: "",
       duration_minutes: "60",
-      discount_percent: "",
     });
     setCurrentImageUrl(null);
     setEditingService(null);
@@ -103,10 +106,6 @@ export default function AdminServicosPage() {
       description: service.description || "",
       price: service.price.toString(),
       duration_minutes: service.duration_minutes?.toString() || "60",
-      discount_percent:
-        service.discount_percent != null
-          ? service.discount_percent.toString()
-          : "",
     });
     setCurrentImageUrl(service.image_url || null);
     setIsModalOpen(true);
@@ -118,13 +117,55 @@ export default function AdminServicosPage() {
     setError(null);
   };
 
-  // Criar ou atualizar serviço
+  // 🔹 Abrir modal de desconto
+  const openDiscountModal = (service: Service) => {
+    setDiscountService(service);
+    setDiscountValue(
+      service.discount_percent != null
+        ? service.discount_percent.toString()
+        : ""
+    );
+    setDiscountModalOpen(true);
+  };
+
+  const closeDiscountModal = () => {
+    setDiscountModalOpen(false);
+    setDiscountService(null);
+    setDiscountValue("");
+  };
+
+  // 🔹 Salvar desconto
+  const saveDiscount = async () => {
+    if (!discountService) return;
+
+    const parsed =
+      discountValue.trim() === "" ? null : Number(discountValue);
+
+    try {
+      const res = await fetch("/api/service", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: discountService.id,
+          discount_percent:
+            parsed != null && !Number.isNaN(parsed) ? parsed : null,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao salvar desconto");
+
+      await fetchServices();
+      closeDiscountModal();
+    } catch (err: any) {
+      alert("Erro ao salvar desconto: " + err.message);
+    }
+  };
+
+  // Criar ou atualizar serviço (SEM mexer no desconto)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-
-    const discountRaw = form.discount_percent.trim();
-    const discountParsed = discountRaw === "" ? null : Number(discountRaw);
 
     const serviceData = {
       name: form.name,
@@ -132,10 +173,6 @@ export default function AdminServicosPage() {
       price: parseFloat(form.price),
       duration_minutes: parseInt(form.duration_minutes, 10),
       image_url: currentImageUrl,
-      discount_percent:
-        discountParsed != null && !Number.isNaN(discountParsed)
-          ? discountParsed
-          : null,
     };
 
     try {
@@ -297,14 +334,15 @@ export default function AdminServicosPage() {
       ) : (
         <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden shadow-lg">
           {/* Cabeçalho */}
-<div className="grid grid-cols-[2fr,1fr,1fr,1fr,1fr,1fr] px-6 py-3 bg-gray-800 text-gray-400 text-sm font-semibold">
-  <span>Serviço</span>
-  <span className="text-center">Duração</span>
-  <span className="text-center">Preço</span>
-  <span className="text-center">Desconto</span>
-  <span className="text-center">Imagem</span>
-  <span className="text-right">Ações</span>
-</div>
+          <div className="grid grid-cols-6 gap-4 px-6 py-3 bg-gray-800 text-gray-400 text-sm font-semibold">
+            <span className="text-center">Imagem</span>
+            <span>Serviço</span>
+            <span className="text-center">Duração</span>
+            <span className="text-center">Preço</span>
+            <span className="text-center">Desconto</span>
+            <span className="text-right">Ações</span>
+          </div>
+
           {/* Linhas */}
           <div>
             {filteredAndSortedServices.map((service) => {
@@ -317,82 +355,92 @@ export default function AdminServicosPage() {
               );
 
               return (
-<div
-  key={service.id}
-  className="grid grid-cols-[2fr,1fr,1fr,1fr,1fr,1fr] items-center gap-4 px-6 py-4 border-t border-gray-800 hover:bg-gray-800/40 transition"
+                <div
+                  key={service.id}
+                  className="grid grid-cols-6 gap-4 px-6 py-4 items-center border-t border-gray-800 hover:bg-gray-800/40 transition"
+                >
+                  {/* Imagem */}
+                  <div className="flex justify-center">
+                    <img
+                      src={
+                        service.image_url ||
+                        "https://via.placeholder.com/80x80/333/d6c6aa?text=IMG"
+                      }
+                      alt={service.name}
+                      className="w-16 h-16 rounded-lg object-cover border border-gray-700"
+                    />
+                  </div>
+
+                  {/* Serviço */}
+                  <div>
+                    <p className="text-white font-semibold">{service.name}</p>
+                    {service.description && (
+                      <p className="text-gray-500 text-sm truncate max-w-[320px]">
+                        {service.description}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Duração */}
+                  <p className="text-center text-gray-300">
+                    {service.duration_minutes ?? 60} min
+                  </p>
+
+                  {/* Preço */}
+                  <div className="text-center">
+                    <p className="text-[#D6C6AA] font-bold">
+                      R$ {formatCurrency(finalPrice)}
+                    </p>
+                    {hasDiscount && (
+                      <p className="text-xs text-gray-400">
+                        De R$ {formatCurrency(service.price)}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Desconto */}
+                  <div className="text-center">
+                    {hasDiscount ? (
+                      <p className="text-green-400 font-semibold">
+                        {service.discount_percent}% OFF
+                      </p>
+                    ) : (
+                      <p className="text-gray-500 text-sm">Sem desconto</p>
+                    )}
+                  </div>
+
+                  {/* Ações */}
+                  <div className="flex justify-end gap-3">
+<button
+  onClick={() => openEditModal(service)}
+  className="px-3 py-1.5 rounded-md bg-[#D6C6AA] text-black text-sm hover:bg-[#cbbd9f] transition flex items-center gap-1"
 >
-  {/* Serviço */}
-  <div>
-    <p className="text-white font-semibold">{service.name}</p>
-    {service.description && (
-      <p className="text-gray-500 text-sm truncate max-w-[320px]">{service.description}</p>
-    )}
-  </div>
+  <Edit className="w-4 h-4" />
+</button>
 
-  {/* Duração */}
-  <p className="text-center text-gray-300">
-    {service.duration_minutes ?? 60} min
-  </p>
+<button
+  onClick={() => openDiscountModal(service)}
+  className="px-3 py-1.5 rounded-md bg-[#6B7280] text-white text-sm hover:bg-[#4B5563] transition"
+>
+  %
+</button>
 
-  {/* Preço final */}
-  <div className="text-center">
-    <p className="text-[#D6C6AA] font-bold">
-      R$ {formatCurrency(finalPrice)}
-    </p>
+<button
+  onClick={() => handleDelete(service.id)}
+  className="px-3 py-1.5 rounded-md bg-[#DC2626] text-white text-sm hover:bg-[#C94747] transition flex items-center gap-1"
+>
+  <Trash2 className="w-4 h-4" />
+</button>
 
-    {hasDiscount && (
-      <p className="text-xs text-gray-400">
-        De R$ {formatCurrency(service.price)}
-      </p>
-    )}
-  </div>
-
-  {/* DESCONTO */}
-  <div className="text-center">
-    {hasDiscount ? (
-      <p className="text-green-400 font-semibold">
-        {service.discount_percent}% OFF
-      </p>
-    ) : (
-      <p className="text-gray-500 text-sm">Sem desconto</p>
-    )}
-  </div>
-
-  {/* Imagem */}
-  <div className="flex justify-center">
-    <img
-      src={service.image_url || "https://via.placeholder.com/80x80/333/d6c6aa?text=IMG"}
-      alt={service.name}
-      className="w-16 h-16 rounded-lg object-cover border border-gray-700"
-    />
-  </div>
-
-  {/* Ações */}
-  <div className="flex justify-end gap-3">
-    <button
-      onClick={() => openEditModal(service)}
-      className="px-3 py-1 rounded-md bg-blue-600 text-sm text-white hover:bg-blue-700 transition flex items-center gap-1"
-    >
-      <Edit className="w-4 h-4" />
-      Editar
-    </button>
-
-    <button
-      onClick={() => handleDelete(service.id)}
-      className="px-3 py-1 rounded-md bg-red-600 text-sm text-white hover:bg-red-700 transition flex items-center gap-1"
-    >
-      <Trash2 className="w-4 h-4" />
-      Deletar
-    </button>
-  </div>
-</div>
+                  </div>
+                </div>
               );
             })}
           </div>
         </div>
       )}
 
-      {/* Modal */}
+      {/* Modal de criar/editar serviço */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-xl backdrop-saturate-200 flex items-center justify-center z-50 p-4 animate-fadeIn">
           <div
@@ -451,9 +499,9 @@ export default function AdminServicosPage() {
                   ></textarea>
                 </div>
 
-                {/* Preço + Duração + Desconto */}
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="col-span-1">
+                {/* Preço + Duração */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
                     <label className="block text-sm text-gray-300 mb-1">
                       Preço (R$)
                     </label>
@@ -469,23 +517,7 @@ export default function AdminServicosPage() {
                     />
                   </div>
 
-                  <div className="col-span-1">
-                    <label className="block text-sm text-gray-300 mb-1">
-                      Desconto (%)
-                    </label>
-                    <input
-                      type="number"
-                      name="discount_percent"
-                      value={form.discount_percent}
-                      onChange={handleFormChange}
-                      min="0"
-                      max="100"
-                      step="1"
-                      className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:ring-2 focus:ring-[#D6C6AA] focus:outline-none"
-                    />
-                  </div>
-
-                  <div className="col-span-1">
+                  <div>
                     <label className="block text-sm text-gray-300 mb-1">
                       Duração (min)
                     </label>
@@ -538,6 +570,80 @@ export default function AdminServicosPage() {
                   className="px-5 py-2 rounded-lg bg-[#D6C6AA] text-black font-semibold hover:bg-[#e8dcc1] transition"
                 >
                   {editingService ? "Salvar Alterações" : "Adicionar Serviço"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de desconto */}
+      {discountModalOpen && discountService && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xl flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-sm rounded-3xl border border-white/20 bg-[#020617]/90 shadow-[0_8px_32px_rgba(0,0,0,0.45)]">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700">
+              <h3 className="text-lg font-semibold text-[#D6C6AA]">
+                Desconto – {discountService.name}
+              </h3>
+              <button
+                onClick={closeDiscountModal}
+                className="text-gray-400 hover:text-white transition"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                saveDiscount();
+              }}
+            >
+              <div className="px-6 py-5 space-y-4">
+                <p className="text-sm text-gray-300">
+                  Defina o desconto em porcentagem para este serviço.
+                </p>
+
+                <div className="flex items-center justify-between text-sm text-gray-400">
+                  <span>Preço base:</span>
+                  <span className="font-semibold text-[#D6C6AA]">
+                    R$ {formatCurrency(discountService.price)}
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-300 mb-1">
+                    Desconto (%)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={discountValue}
+                    onChange={(e) => setDiscountValue(e.target.value)}
+                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:ring-2 focus:ring-[#D6C6AA] focus:outline-none"
+                    placeholder="Ex: 10 para 10% de desconto"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Deixe vazio para remover o desconto.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-700 bg-gray-900 rounded-b-3xl">
+                <button
+                  type="button"
+                  onClick={closeDiscountModal}
+                  className="px-4 py-2 rounded-lg bg-gray-700 text-white text-sm font-medium hover:bg-gray-600 transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-lg bg-[#D6C6AA] text-black text-sm font-semibold hover:bg-[#e8dcc1] transition"
+                >
+                  Salvar desconto
                 </button>
               </div>
             </form>

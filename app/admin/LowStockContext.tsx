@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
+import { useNotifications } from "./NotificationsContext";
 
 interface ProductLow {
   id: string;
@@ -33,42 +34,32 @@ export function LowStockProvider({ children }: { children: React.ReactNode }) {
   const [soundEnabled, setSoundEnabled] = useState(false);
   const notifiedRef = useRef(false);
 
-  // 🧠 Estado persistente de novos agendamentos
-const [newAppointmentsCount, setNewAppointmentsCount] = useState<number>(() => {
-  if (typeof window !== "undefined") {
-    const stored = localStorage.getItem("newAppointmentsCount");
-    return stored ? parseInt(stored) : 0;
-  }
-  return 0;
-});
+  const { addNotification } = useNotifications();
 
-// 🔁 Atualiza localStorage sempre que o contador mudar
-useEffect(() => {
-  localStorage.setItem("newAppointmentsCount", String(newAppointmentsCount));
-}, [newAppointmentsCount]);
+  const [newAppointmentsCount, setNewAppointmentsCount] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("newAppointmentsCount");
+      return stored ? parseInt(stored) : 0;
+    }
+    return 0;
+  });
 
-// ✅ Limpa contador e salva
-const clearNewAppointments = () => {
-  setNewAppointmentsCount(0);
-  localStorage.setItem("newAppointmentsCount", "0");
-};
+  useEffect(() => {
+    localStorage.setItem("newAppointmentsCount", String(newAppointmentsCount));
+  }, [newAppointmentsCount]);
 
+  const clearNewAppointments = () => {
+    setNewAppointmentsCount(0);
+    localStorage.setItem("newAppointmentsCount", "0");
+  };
 
-  /* =========================================================
-   * 🔊 Função para tocar som (após permissão)
-   * ========================================================= */
   const playSound = (file: string) => {
     if (!soundEnabled) return;
     const audio = new Audio(file);
     audio.volume = 0.6;
-    audio.play().catch(() => {
-      console.warn("🔇 Som bloqueado (usuário ainda não interagiu).");
-    });
+    audio.play().catch(() => {});
   };
 
-  /* =========================================================
-   * ⚠️ Estoque baixo
-   * ========================================================= */
   async function reloadLowStock() {
     try {
       const res = await fetch("/api/estoque", { cache: "no-store" });
@@ -78,11 +69,21 @@ const clearNewAppointments = () => {
       const lows = data.filter((p: any) => p.stock <= 5);
       setLowStock(lows);
 
+lows.forEach((p: any) => {
+  addNotification({
+    id: `lowstock-${p.id}`,
+    type: "estoque",
+    message: `⚠️ Estoque baixo em ${p.name} (${p.stock})`,
+    date: new Date().toISOString(),
+  });
+});
+
+
       if (lows.length > 0 && !notifiedRef.current) {
         toast.warning(
-          `⚠️ ${lows.length} produto${
-            lows.length > 1 ? "s" : ""
-          } com estoque baixo: ${lows.map((p: any) => p.name).join(", ")}`,
+          `⚠️ ${lows.length} produto${lows.length > 1 ? "s" : ""} com estoque baixo: ${lows
+            .map((p: any) => p.name)
+            .join(", ")}`,
           { duration: 6000 }
         );
         playSound("/sounds/alert.mp3");
@@ -95,9 +96,6 @@ const clearNewAppointments = () => {
     }
   }
 
-  /* =========================================================
-   * 📅 Novos agendamentos (Realtime)
-   * ========================================================= */
   useEffect(() => {
     const channel = supabase
       .channel("appointments_realtime")
@@ -105,8 +103,15 @@ const clearNewAppointments = () => {
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "appointments" },
         (payload) => {
-          console.log("📅 Novo agendamento detectado:", payload.new);
           setNewAppointmentsCount((prev) => prev + 1);
+
+          addNotification({
+            id: crypto.randomUUID(),
+            type: "agendamento",
+            message: "Novo agendamento criado!",
+            date: new Date().toISOString(),
+          });
+
           toast.success("📅 Novo agendamento criado!", { duration: 4000 });
           playSound("/sounds/notify.mp3");
         }
@@ -118,9 +123,6 @@ const clearNewAppointments = () => {
     };
   }, [soundEnabled]);
 
-  /* =========================================================
-   * 🔁 Auto reload estoque
-   * ========================================================= */
   useEffect(() => {
     reloadLowStock();
     const interval = setInterval(reloadLowStock, 1000 * 60 * 3);
