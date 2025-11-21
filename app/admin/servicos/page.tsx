@@ -1,6 +1,15 @@
 "use client";
-import { useState, useEffect } from "react";
-import { PlusCircle, Edit, Trash2, XCircle, Clock } from "lucide-react";
+
+import { useState, useEffect, useMemo } from "react";
+import {
+  PlusCircle,
+  Edit,
+  Trash2,
+  XCircle,
+  Clock,
+  Search,
+  ArrowUpDown,
+} from "lucide-react";
 import { ImageUpload } from "@/components/ui/image-upload";
 
 interface Service {
@@ -11,6 +20,9 @@ interface Service {
   duration_minutes?: number;
   image_url?: string | null;
 }
+
+type SortBy = "name" | "duration" | "price";
+type SortDir = "asc" | "desc";
 
 export default function AdminServicosPage() {
   const [services, setServices] = useState<Service[]>([]);
@@ -26,11 +38,16 @@ export default function AdminServicosPage() {
   });
   const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
 
+  // filtros/ordenação
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortBy, setSortBy] = useState<SortBy>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
   useEffect(() => {
     fetchServices();
   }, []);
 
-  // 🔄 Buscar serviços
+  // Buscar serviços
   async function fetchServices() {
     setLoading(true);
     try {
@@ -45,7 +62,9 @@ export default function AdminServicosPage() {
     setLoading(false);
   }
 
-  const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleFormChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
@@ -75,7 +94,7 @@ export default function AdminServicosPage() {
     setCurrentImageUrl(null);
   };
 
-  // 💾 Criar ou atualizar serviço
+  // Criar ou atualizar serviço
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -108,7 +127,7 @@ export default function AdminServicosPage() {
     }
   };
 
-  // 🗑️ Deletar serviço
+  // Deletar serviço
   const handleDelete = async (id: string) => {
     if (confirm("Tem certeza que deseja deletar este serviço?")) {
       try {
@@ -127,170 +146,328 @@ export default function AdminServicosPage() {
     }
   };
 
+  // Lista filtrada + ordenada
+  const filteredAndSortedServices = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+
+    let list = [...services];
+
+    if (term) {
+      list = list.filter((s) => {
+        const name = s.name?.toLowerCase() ?? "";
+        const desc = s.description?.toLowerCase() ?? "";
+        return name.includes(term) || desc.includes(term);
+      });
+    }
+
+    list.sort((a, b) => {
+      let aVal: string | number = "";
+      let bVal: string | number = "";
+
+      if (sortBy === "name") {
+        aVal = a.name || "";
+        bVal = b.name || "";
+        const cmp = String(aVal).localeCompare(String(bVal), "pt-BR", {
+          sensitivity: "base",
+        });
+        return sortDir === "asc" ? cmp : -cmp;
+      }
+
+      if (sortBy === "duration") {
+        aVal = a.duration_minutes ?? 0;
+        bVal = b.duration_minutes ?? 0;
+      } else if (sortBy === "price") {
+        aVal = a.price ?? 0;
+        bVal = b.price ?? 0;
+      }
+
+      const diff = Number(aVal) - Number(bVal);
+      return sortDir === "asc" ? diff : -diff;
+    });
+
+    return list;
+  }, [services, searchTerm, sortBy, sortDir]);
+
   if (loading) return <p className="text-[#D6C6AA]">Carregando serviços...</p>;
   if (error) return <p className="text-red-500">Erro: {error}</p>;
 
   return (
-    <div className="p-6">
+    <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center mb-8">
-        <h2 className="text-3xl font-bold text-[#D6C6AA]">Gerenciar Serviços</h2>
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="text-3xl font-bold text-[#D6C6AA]">
+            Gerenciar Serviços
+          </h2>
+          <p className="text-sm text-gray-400 mt-1">
+            Cadastre, organize e edite os serviços do Studio.
+          </p>
+        </div>
+
         <button
           onClick={openAddModal}
           className="bg-[#D6C6AA] text-black px-4 py-2 rounded-lg font-semibold flex items-center gap-2 hover:bg-[#e5d8c2] transition-colors"
         >
-          <PlusCircle className="w-5 h-5" /> Adicionar Serviço
+          <PlusCircle className="w-5 h-5" />
+          Adicionar Serviço
         </button>
       </div>
 
+      {/* Filtros: busca + ordenação */}
+      {services.length > 0 && (
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          {/* Busca */}
+          <div className="relative w-full md:max-w-sm">
+            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar por nome ou descrição"
+              className="w-full pl-9 pr-3 py-2 rounded-lg bg-gray-900 border border-gray-700 text-sm text-gray-100 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-[#D6C6AA]"
+            />
+          </div>
+
+          {/* Ordenação */}
+          <div className="flex items-center gap-3 justify-between md:justify-end">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-400 uppercase tracking-wide">
+                Ordenar por
+              </span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortBy)}
+                className="bg-gray-900 border border-gray-700 text-sm text-gray-100 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#D6C6AA]"
+              >
+                <option value="name">Nome</option>
+                <option value="duration">Duração</option>
+                <option value="price">Preço</option>
+              </select>
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                setSortDir((prev) => (prev === "asc" ? "desc" : "asc"))
+              }
+              className="inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-gray-900 border border-gray-700 text-sm text-gray-100 hover:bg-gray-800 transition-colors"
+            >
+              <ArrowUpDown className="w-4 h-4" />
+              <span>{sortDir === "asc" ? "Asc" : "Desc"}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Listagem */}
       {services.length === 0 ? (
-        <p className="text-gray-400">Nenhum serviço cadastrado ainda. Adicione um novo!</p>
+        <p className="text-gray-400">
+          Nenhum serviço cadastrado ainda. Adicione um novo para começar.
+        </p>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {services.map((service) => (
-            <div key={service.id} className="bg-gray-800 rounded-lg shadow-md overflow-hidden">
-              <img
-                src={service.image_url || "https://via.placeholder.com/400x250/333/d6c6aa?text=Serviço"}
-                alt={service.name}
-                className="w-full h-48 object-cover"
-              />
-              <div className="p-4">
-                <h3 className="text-xl font-semibold text-white mb-2">{service.name}</h3>
-                <p className="text-gray-400 text-sm mb-2">{service.description}</p>
-                <div className="flex items-center gap-2 text-sm text-gray-300 mb-3">
-                  <Clock className="w-4 h-4 text-[#D6C6AA]" />
-                  <span>{service.duration_minutes || 60} min</span>
-                </div>
-                <p className="text-[#D6C6AA] font-bold text-lg mb-4">
-                  R$ {service.price.toFixed(2).replace(".", ",")}
-                </p>
+        <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden shadow-lg">
+          {/* Cabeçalho */}
+          <div className="grid grid-cols-5 px-6 py-3 bg-gray-800 text-gray-400 text-sm font-semibold">
+            <span className="col-span-2">Serviço</span>
+            <span className="flex items-center gap-1">
+              <Clock className="w-4 h-4 text-gray-500" />
+              Duração
+            </span>
+            <span>Preço</span>
+            <span>Imagem</span>
+            <span className="text-right">Ações</span>
+          </div>
 
-                <div className="flex gap-2">
+          {/* Linhas */}
+          <div>
+            {filteredAndSortedServices.map((service) => (
+              <div
+                key={service.id}
+                className="grid grid-cols-5 items-center gap-4 px-6 py-4 border-t border-gray-800 hover:bg-gray-800/40 transition"
+              >
+                {/* Nome + descrição */}
+                <div className="col-span-2">
+                  <p className="text-white font-semibold">{service.name}</p>
+                  {service.description && (
+                    <p className="text-gray-500 text-sm truncate max-w-[320px]">
+                      {service.description}
+                    </p>
+                  )}
+                </div>
+
+                {/* Duração */}
+                <div className="text-gray-300">
+                  {service.duration_minutes || 60} min
+                </div>
+
+                {/* Preço */}
+                <div className="text-[#D6C6AA] font-bold">
+                  R$ {service.price.toFixed(2).replace(".", ",")}
+                </div>
+
+                {/* Mini Imagem */}
+                <div>
+                  <img
+                    src={
+                      service.image_url ||
+                      "https://via.placeholder.com/80x80/333/d6c6aa?text=IMG"
+                    }
+                    alt={service.name}
+                    className="w-16 h-16 rounded-lg object-cover border border-gray-700"
+                  />
+                </div>
+
+                {/* Ações */}
+                <div className="flex justify-end gap-3">
                   <button
                     onClick={() => openEditModal(service)}
-                    className="bg-blue-600 text-white px-3 py-1 rounded-md text-sm flex items-center gap-1 hover:bg-blue-700 transition-colors"
+                    className="px-3 py-1 rounded-md bg-blue-600 text-sm text-white hover:bg-blue-700 transition flex items-center gap-1"
                   >
-                    <Edit className="w-4 h-4" /> Editar
+                    <Edit className="w-4 h-4" />
+                    Editar
                   </button>
+
                   <button
                     onClick={() => handleDelete(service.id)}
-                    className="bg-red-600 text-white px-3 py-1 rounded-md text-sm flex items-center gap-1 hover:bg-red-700 transition-colors"
+                    className="px-3 py-1 rounded-md bg-red-600 text-sm text-white hover:bg-red-700 transition flex items-center gap-1"
                   >
-                    <Trash2 className="w-4 h-4" /> Deletar
+                    <Trash2 className="w-4 h-4" />
+                    Deletar
                   </button>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
 
       {/* Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-900 rounded-lg p-8 w-full max-w-md shadow-lg relative">
-            <button
-              onClick={closeModal}
-              className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"
-            >
-              <XCircle className="w-6 h-6" />
-            </button>
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-xl backdrop-saturate-200 flex items-center justify-center z-50 p-4 animate-fadeIn">
+          <div
+            className="
+              backdrop-blur-2xl backdrop-saturate-150 
+              bg-white/10 
+              border border-white/20 
+              shadow-[0_8px_32px_rgba(0,0,0,0.25)]
+              rounded-3xl w-full max-w-md
+              animate-zoomIn
+            "
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700">
+              <h3 className="text-xl font-bold text-[#D6C6AA]">
+                {editingService ? "Editar Serviço" : "Adicionar Serviço"}
+              </h3>
 
-            <h3 className="text-2xl font-bold text-[#D6C6AA] mb-6 text-center">
-              {editingService ? "Editar Serviço" : "Adicionar Novo Serviço"}
-            </h3>
+              <button
+                onClick={closeModal}
+                className="text-gray-400 hover:text-white transition"
+              >
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-300 mb-2">
-                  Nome do Serviço
-                </label>
-                <input
-                  type="text"
-                  id="name"
-                  name="name"
-                  value={form.name}
-                  onChange={handleFormChange}
-                  className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:border-[#D6C6AA]"
-                  required
-                />
-              </div>
-
-              <div>
-                <label htmlFor="description" className="block text-sm font-medium text-gray-300 mb-2">
-                  Descrição
-                </label>
-                <textarea
-                  id="description"
-                  name="description"
-                  value={form.description}
-                  onChange={handleFormChange}
-                  rows={3}
-                  className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:border-[#D6C6AA]"
-                ></textarea>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+            {/* Conteúdo (scroll) */}
+            <form onSubmit={handleSubmit}>
+              <div className="px-6 py-4 overflow-y-auto space-y-5 max-h-[70vh]">
+                {/* Nome */}
                 <div>
-                  <label htmlFor="price" className="block text-sm font-medium text-gray-300 mb-2">
-                    Preço (R$)
+                  <label className="block text-sm text-gray-300 mb-1">
+                    Nome do Serviço
                   </label>
                   <input
-                    type="number"
-                    id="price"
-                    name="price"
-                    value={form.price}
+                    type="text"
+                    name="name"
+                    value={form.name}
                     onChange={handleFormChange}
-                    step="0.01"
-                    min="0"
-                    className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:border-[#D6C6AA]"
+                    className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:ring-2 focus:ring-[#D6C6AA] focus:outline-none"
                     required
                   />
                 </div>
+
+                {/* Descrição */}
                 <div>
-                  <label htmlFor="duration_minutes" className="block text-sm font-medium text-gray-300 mb-2">
-                    Duração (min)
+                  <label className="block text-sm text-gray-300 mb-1">
+                    Descrição
                   </label>
-                  <input
-                    type="number"
-                    id="duration_minutes"
-                    name="duration_minutes"
-                    value={form.duration_minutes}
+                  <textarea
+                    name="description"
+                    value={form.description}
                     onChange={handleFormChange}
-                    min="10"
-                    step="5"
-                    className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:border-[#D6C6AA]"
-                    required
-                  />
+                    rows={3}
+                    className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:ring-2 focus:ring-[#D6C6AA] focus:outline-none"
+                  ></textarea>
                 </div>
+
+                {/* Preço + Duração */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm text-gray-300 mb-1">
+                      Preço (R$)
+                    </label>
+                    <input
+                      type="number"
+                      name="price"
+                      value={form.price}
+                      onChange={handleFormChange}
+                      step="0.01"
+                      className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:ring-2 focus:ring-[#D6C6AA] focus:outline-none"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-gray-300 mb-1">
+                      Duração (min)
+                    </label>
+                    <input
+                      type="number"
+                      name="duration_minutes"
+                      value={form.duration_minutes}
+                      onChange={handleFormChange}
+                      min="10"
+                      step="5"
+                      className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:ring-2 focus:ring-[#D6C6AA] focus:outline-none"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Imagem */}
+                <div>
+                  <label className="block text-sm text-gray-300 mb-2">
+                    Imagem do Serviço
+                  </label>
+
+                  <div className="rounded-xl overflow-hidden border border-gray-700 bg-gray-800">
+                    <ImageUpload
+                      initialImageUrl={currentImageUrl}
+                      onUploadSuccess={(url) => setCurrentImageUrl(url)}
+                      onRemove={() => setCurrentImageUrl(null)}
+                      bucketName="images"
+                    />
+                  </div>
+                </div>
+
+                {error && (
+                  <p className="text-red-500 text-sm text-center">{error}</p>
+                )}
               </div>
 
-              <div>
-                <label htmlFor="image_url" className="block text-sm font-medium text-gray-300 mb-2">
-                  Imagem do Serviço
-                </label>
-                <ImageUpload
-                  initialImageUrl={currentImageUrl}
-                  onUploadSuccess={(url) => setCurrentImageUrl(url)}
-                  onRemove={() => setCurrentImageUrl(null)}
-                  bucketName="images"
-                />
-              </div>
-
-              {error && <p className="text-red-500 text-sm mt-2 text-center">{error}</p>}
-
-              <div className="flex justify-end gap-3 mt-6">
+              {/* Footer */}
+              <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-700 bg-gray-900 rounded-b-3xl">
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="bg-gray-700 text-white px-5 py-2 rounded-lg font-semibold hover:bg-gray-600 transition-colors"
+                  className="px-5 py-2 rounded-lg bg-gray-700 text-white font-semibold hover:bg-gray-600 transition"
                 >
                   Cancelar
                 </button>
+
                 <button
                   type="submit"
-                  className="bg-[#D6C6AA] text-black px-5 py-2 rounded-lg font-semibold hover:bg-[#e5d8c2] transition-colors"
+                  className="px-5 py-2 rounded-lg bg-[#D6C6AA] text-black font-semibold hover:bg-[#e8dcc1] transition"
                 >
                   {editingService ? "Salvar Alterações" : "Adicionar Serviço"}
                 </button>

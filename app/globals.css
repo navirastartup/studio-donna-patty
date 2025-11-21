@@ -128,6 +128,37 @@
   object-position: center 32%;
 }
 
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
+  to {
+    opacity: 1;
+    backdrop-filter: blur(20px);
+  }
+}
+
+@keyframes zoomIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.25s ease-out forwards;
+}
+
+.animate-zoomIn {
+  animation: zoomIn 0.25s ease-out forwards;
+}
+
+
 /* Telas médias (>= 1280px — desktops maiores) 
    a gente relaxa um pouco o recorte */
 @media (min-width: 1280px) {
