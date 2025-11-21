@@ -240,9 +240,15 @@ useEffect(() => {
     const dd = String(selectedDate).padStart(2, "0");
 
     try {
-      const res = await fetch(
-        `/api/appointments/available?date=${yyyy}-${mm}-${dd}&professional_id=${selectedProfessional.id}&service_id=${selectedService.id}`
-      );
+const res = await fetch("/api/appointments/available", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    date: `${yyyy}-${mm}-${dd}`,
+    professional_id: selectedProfessional.id,
+    service_id: selectedService.id,
+  }),
+});
 
       const data = await res.json();
 
