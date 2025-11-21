@@ -702,192 +702,106 @@ await updateAppointmentStatus(completeModal.appointmentId, "completed", {
       )}
 
       {/* MODAL DE CONCLUSÃO + PAGAMENTO */}
-      {completeModal.open && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-900 p-6 rounded-lg border border-gray-700 w-full max-w-sm">
-            <h3 className="text-xl font-bold text-[#D6C6AA] mb-4">
-              Concluir agendamento
-            </h3>
+{completeModal.open && (
+  <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+    <div className="bg-gray-900 p-6 rounded-lg border border-gray-700 w-full max-w-sm">
+      <h3 className="text-xl font-bold text-[#D6C6AA] mb-4">
+        Concluir agendamento
+      </h3>
 
-<p className="text-sm text-gray-300 mb-3">
-  Ao concluir, o agendamento será marcado como{" "}
-  <span className="font-semibold">Concluído</span>.
-  O lançamento financeiro poderá ser marcado como{" "}
-  <span className="font-semibold">Pago</span> ou{" "}
-  <span className="font-semibold">Pendente</span>.
-</p>
-            <div className="space-y-3 mb-4">
-              <div>
-                <label className="block text-sm text-gray-300 mb-1">
-                  Valor
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={completeModal.amount}
-                  onChange={(e) =>
-                    setCompleteModal((prev) => ({
-                      ...prev,
-                      amount: Number(e.target.value || 0),
-                    }))
-                  }
-                  className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-600 text-white"
-                />
-              </div>
+      <p className="text-sm text-gray-300 mb-3">
+        Ao concluir, o agendamento será marcado como{" "}
+        <span className="font-semibold">Concluído</span>. O lançamento financeiro
+        poderá ser marcado como <span className="font-semibold">Pago</span> ou{" "}
+        <span className="font-semibold">Pendente</span>.
+      </p>
 
-              <div>
-                <label className="block text-sm text-gray-300 mb-1">
-                  Método de pagamento
-                </label>
-                <select
-                  value={completeModal.method}
-                  onChange={(e) =>
-                    setCompleteModal((prev) => ({
-                      ...prev,
-                      method: e.target.value,
-                    }))
-                  }
-                  className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-600 text-white"
-                >
-                  <option value="Pix">Pix</option>
-                  <option value="Cartão">Cartão</option>
-                  <option value="Dinheiro">Dinheiro</option>
-                  <option value="Transferência">Transferência</option>
-                  <option value="Outro">Outro</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() =>
-                  setCompleteModal({
-                    open: false,
-                    appointmentId: "",
-                    amount: 0,
-                    method: "Pix",
-                  })
-                }
-                className="bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-600"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleConfirmComplete}
-                className="bg-[#D6C6AA] text-black px-4 py-2 rounded-lg hover:bg-[#e8dcbf]"
-              >
-
-              <div>
-  <label className="block text-sm text-gray-300 mb-1">Status do Pagamento</label>
-  <select
-    value={completeModal.method === "PENDENTE" ? "pending" : "paid"}
-    onChange={(e) =>
-      setCompleteModal((prev) => ({
-        ...prev,
-        method: e.target.value === "pending" ? "PENDENTE" : prev.method,
-        markPaid: e.target.value === "paid",
-      }))
-    }
-    className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-600 text-white mb-3"
-  >
-    <option value="paid">Pago agora</option>
-    <option value="pending">Pendente (não pagar agora)</option>
-  </select>
-</div>
-                Confirmar
-              </button>
-            </div>
-          </div>
+      <div className="space-y-3 mb-4">
+        <div>
+          <label className="block text-sm text-gray-300 mb-1">Valor</label>
+          <input
+            type="number"
+            step="0.01"
+            value={completeModal.amount}
+            onChange={(e) =>
+              setCompleteModal((prev) => ({
+                ...prev,
+                amount: Number(e.target.value || 0),
+              }))
+            }
+            className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-600 text-white"
+          />
         </div>
-      )}
 
-      {/* MODAL DE REAGENDAMENTO */}
-      {reschedule.id && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-gray-900 p-6 rounded-lg border border-gray-700 w-[90%] max-w-sm">
-            <h3 className="text-xl font-bold text-[#D6C6AA] mb-4">
-              Reagendar
-            </h3>
-
-            {/* DATA */}
-            <input
-              type="date"
-              value={reschedule.newDate}
-              onChange={(e) => {
-                const newDate = e.target.value;
-                setReschedule((prev) => ({
-                  ...prev,
-                  newDate,
-                  selectedSlot: "",
-                }));
-                fetchAvailableSlots(
-                  newDate,
-                  reschedule.professional_id,
-                  reschedule.service_id
-                );
-              }}
-              className="w-full px-4 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white mb-4"
-            />
-
-            {/* HORÁRIOS DISPONÍVEIS */}
-            {reschedule.slots && (
-              <div className="grid grid-cols-2 gap-2 mb-4">
-                {reschedule.slots.length === 0 && (
-                  <p className="text-gray-400">Nenhum horário disponível</p>
-                )}
-
-                {reschedule.slots.map((slot) => (
-                  <button
-                    key={slot}
-                    onClick={() =>
-                      setReschedule((prev) => ({
-                        ...prev,
-                        selectedSlot: slot,
-                      }))
-                    }
-                    className={`px-3 py-2 rounded-lg border ${
-                      reschedule.selectedSlot === slot
-                        ? "bg-[#D6C6AA] text-black"
-                        : "bg-gray-800 text-white border-gray-600"
-                    }`}
-                  >
-                    {new Date(slot).toLocaleTimeString("pt-BR", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* BOTÕES MODAL */}
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() =>
-                  setReschedule({
-                    id: "",
-                    newDate: "",
-                    slots: [],
-                    selectedSlot: "",
-                    professional_id: "",
-                    service_id: "",
-                  })
-                }
-                className="bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-600"
-              >
-                Cancelar
-              </button>
-              <button
-                disabled={!reschedule.selectedSlot}
-                onClick={rescheduleAppointment}
-                className="bg-[#D6C6AA] text-black px-4 py-2 rounded-lg hover:bg-[#e8dcbf] disabled:opacity-50"
-              >
-                Salvar
-              </button>
-            </div>
-          </div>
+        <div>
+          <label className="block text-sm text-gray-300 mb-1">
+            Método de pagamento
+          </label>
+          <select
+            value={completeModal.method}
+            onChange={(e) =>
+              setCompleteModal((prev) => ({
+                ...prev,
+                method: e.target.value,
+              }))
+            }
+            className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-600 text-white"
+          >
+            <option value="Pix">Pix</option>
+            <option value="Cartão">Cartão</option>
+            <option value="Dinheiro">Dinheiro</option>
+            <option value="Transferência">Transferência</option>
+            <option value="Outro">Outro</option>
+          </select>
         </div>
-      )}
+
+        {/* AQUI — FORA DOS BOTÕES */}
+        <div>
+          <label className="block text-sm text-gray-300 mb-1">
+            Status do Pagamento
+          </label>
+          <select
+            value={completeModal.method === "PENDENTE" ? "pending" : "paid"}
+            onChange={(e) =>
+              setCompleteModal((prev) => ({
+                ...prev,
+                method: e.target.value === "pending" ? "PENDENTE" : prev.method,
+                markPaid: e.target.value === "paid",
+              }))
+            }
+            className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-600 text-white"
+          >
+            <option value="paid">Pago agora</option>
+            <option value="pending">Pendente (não pagar agora)</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <button
+          onClick={() =>
+            setCompleteModal({
+              open: false,
+              appointmentId: "",
+              amount: 0,
+              method: "Pix",
+            })
+          }
+          className="bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-600"
+        >
+          Cancelar
+        </button>
+
+        <button
+          onClick={handleConfirmComplete}
+          className="bg-[#D6C6AA] text-black px-4 py-2 rounded-lg hover:bg-[#e8dcbf]"
+        >
+          Confirmar
+        </button>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 }
