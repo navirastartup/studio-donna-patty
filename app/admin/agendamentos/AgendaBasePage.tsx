@@ -340,11 +340,11 @@ export default function AgendaBasePage({
   const handleConfirmComplete = async () => {
     if (!completeModal.appointmentId) return;
 
-    await updateAppointmentStatus(completeModal.appointmentId, "completed", {
-      markPaid: true,
-      method: completeModal.method,
-      amount: completeModal.amount,
-    });
+await updateAppointmentStatus(completeModal.appointmentId, "completed", {
+  markPaid: completeModal.method !== "PENDENTE",
+  method: completeModal.method === "PENDENTE" ? "pending" : completeModal.method,
+  amount: completeModal.amount,
+});
 
     setCompleteModal({
       open: false,
@@ -709,13 +709,13 @@ export default function AgendaBasePage({
               Concluir agendamento
             </h3>
 
-            <p className="text-sm text-gray-300 mb-3">
-              Ao concluir, o agendamento será marcado como{" "}
-              <span className="font-semibold">Concluído</span> e será lançado
-              automaticamente no <span className="font-semibold">Financeiro</span>{" "}
-              como <span className="font-semibold">Pago</span>.
-            </p>
-
+<p className="text-sm text-gray-300 mb-3">
+  Ao concluir, o agendamento será marcado como{" "}
+  <span className="font-semibold">Concluído</span>.
+  O lançamento financeiro poderá ser marcado como{" "}
+  <span className="font-semibold">Pago</span> ou{" "}
+  <span className="font-semibold">Pendente</span>.
+</p>
             <div className="space-y-3 mb-4">
               <div>
                 <label className="block text-sm text-gray-300 mb-1">
@@ -776,6 +776,24 @@ export default function AgendaBasePage({
                 onClick={handleConfirmComplete}
                 className="bg-[#D6C6AA] text-black px-4 py-2 rounded-lg hover:bg-[#e8dcbf]"
               >
+
+              <div>
+  <label className="block text-sm text-gray-300 mb-1">Status do Pagamento</label>
+  <select
+    value={completeModal.method === "PENDENTE" ? "pending" : "paid"}
+    onChange={(e) =>
+      setCompleteModal((prev) => ({
+        ...prev,
+        method: e.target.value === "pending" ? "PENDENTE" : prev.method,
+        markPaid: e.target.value === "paid",
+      }))
+    }
+    className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-600 text-white mb-3"
+  >
+    <option value="paid">Pago agora</option>
+    <option value="pending">Pendente (não pagar agora)</option>
+  </select>
+</div>
                 Confirmar
               </button>
             </div>
