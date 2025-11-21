@@ -19,11 +19,10 @@ export async function POST(req: Request) {
       );
     }
 
-    // Dia da semana baseado na data (sem timezone)
     const [Y, M, D] = date.split("-").map(Number);
     const weekDay = new Date(Y, M - 1, D).getDay();
 
-    // 1 — Buscar horário do salão
+    // 1. Horário do salão
     const { data: schedule } = await supabase
       .from("schedules")
       .select("*")
@@ -32,34 +31,31 @@ export async function POST(req: Request) {
 
     if (!schedule) return NextResponse.json({ available: [] });
 
-    const open = schedule.start_time;       // "07:00"
-    const close = schedule.end_time;        // "18:00"
-    const breakStart = schedule.break_start_time; // "13:00"
-    const breakEnd = schedule.break_end_time;     // "13:30"
+    const open = schedule.start_time;
+    const close = schedule.end_time;
+    const breakStart = schedule.break_start_time;
+    const breakEnd = schedule.break_end_time;
 
-    // 2 — Buscar duração do serviço
+    // 2. Duração do serviço
     const { data: service } = await supabase
       .from("services")
       .select("duration_minutes")
       .eq("id", service_id)
       .single();
 
-    if (!service?.duration_minutes) {
+    if (!service?.duration_minutes)
       return NextResponse.json({ available: [] });
-    }
 
     const duration = service.duration_minutes;
 
-    // 3 — Gerar todos os slots possíveis
+    // 3. Gerar slots
     const slots: string[] = [];
-
     let current = makeLocal(date, open);
     const limit = makeLocal(date, close);
 
     while (current < limit) {
       const end = new Date(current.getTime() + duration * 60000);
 
-      // slot só entra se terminar ANTES ou IGUAL ao limite
       if (end <= limit) {
         const hh = String(current.getHours()).padStart(2, "0");
         const mm = String(current.getMinutes()).padStart(2, "0");
@@ -69,7 +65,7 @@ export async function POST(req: Request) {
       current = new Date(current.getTime() + 30 * 60000);
     }
 
-    // 4 — Remover horários que caem dentro da pausa
+    // 4. Remover horários dentro da pausa
     const filteredSlots = slots.filter((slot) => {
       if (!breakStart || !breakEnd) return true;
 
@@ -80,10 +76,10 @@ export async function POST(req: Request) {
       return !(slotTime >= pauseStart && slotTime < pauseEnd);
     });
 
-    // 5 — Buscar agendamentos existentes
+    // 5. Buscar agendamentos existentes
     let query = supabase
       .from("appointments")
-      .select("start_time, end_time, professional_id")
+      .select("start_time, end_time")
       .gte("start_time", `${date}T00:00:00`)
       .lte("start_time", `${date}T23:59:59`);
 
@@ -91,44 +87,41 @@ export async function POST(req: Request) {
 
     const { data: booked } = await query;
 
-    const blocked =
+    const events =
       booked?.map((b) => ({
         start: new Date(b.start_time).getTime(),
         end: new Date(b.end_time).getTime(),
       })) || [];
 
-    // 6 — Filtrar slots que colidem
+    const BREAK = 10 * 60000; // 10 minutos
+
+    // 🔥 SE NÃO TEM NENHUM AGENDAMENTO → libera todos os slots filtrados
+    if (events.length === 0) {
+      return NextResponse.json({
+        available: filteredSlots,
+      });
+    }
+
+    // 6. Filtrar colisões (com intervalo obrigatório)
     const available = filteredSlots.filter((slot) => {
       const start = makeLocal(date, slot).getTime();
       const end = start + duration * 60000;
 
-      return !blocked.some((b) => !(end <= b.start || start >= b.end));
+      return !events.some((b) => {
+        return !(
+          end + BREAK <= b.start ||
+          start >= b.end + BREAK
+        );
+      });
     });
 
-    // 7 — Se 18:00 não coube, mas algum horário após isso couber → adicionar automaticamente
-    const lastPossibleStart = new Date(limit.getTime() - duration * 60000);
-    const lastHH = String(lastPossibleStart.getHours()).padStart(2, "0");
-    const lastMM = String(lastPossibleStart.getMinutes()).padStart(2, "0");
-    const lastSlot = `${lastHH}:${lastMM}`;
-
-    if (
-      !available.includes(lastSlot) &&
-      !filteredSlots.includes(lastSlot)
-    ) {
-      // caso o lastSlot tenha sido removido pela pausa ou outro fator, não adiciona
-    } else if (!available.includes(lastSlot)) {
-      // verificar colisão antes de adicionar
-      const s = makeLocal(date, lastSlot).getTime();
-      const e = s + duration * 60000;
-
-      const collides = blocked.some((b) => !(e <= b.start || s >= b.end));
-
-      if (!collides) available.push(lastSlot);
-    }
-
-    return NextResponse.json({
-      available: available.sort(),
+    // 7. Limitar para não oferecer horários MUITO tarde
+    const final = available.filter((slot) => {
+      const [h] = slot.split(":").map(Number);
+      return h <= 20; // limite máximo 20:00
     });
+
+    return NextResponse.json({ available: final });
   } catch (e: any) {
     console.error("ERRO:", e);
     return NextResponse.json({ error: e.message }, { status: 500 });
