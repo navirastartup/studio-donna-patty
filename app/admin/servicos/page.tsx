@@ -16,7 +16,7 @@ interface Service {
   id: string;
   name: string;
   description?: string;
-  price: number;                // preço base (sem desconto)
+  price: number; // preço base (sem desconto)
   duration_minutes?: number;
   image_url?: string | null;
   discount_percent?: number | null; // novo campo
@@ -289,105 +289,122 @@ export default function AdminServicosPage() {
         </div>
       )}
 
-{/* LISTAGEM */}
-{services.length === 0 ? (
-  <p className="text-gray-400">Nenhum serviço cadastrado ainda.</p>
-) : (
-  <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden shadow-lg">
-
-    {/* Cabeçalho */}
-    <div className="
-      grid grid-cols-[2fr,1fr,1fr,1fr,1fr]
-      px-6 py-3 bg-gray-800
-      text-gray-400 text-sm font-semibold
-    ">
-      <span>Serviço</span>
-      <span className="flex items-center justify-center gap-1">
-        <Clock className="w-4 h-4 text-gray-400" />  
-        Duração
-      </span>
-      <span className="text-center">Preço</span>
-      <span className="text-center">Imagem</span>
-      <span className="text-right">Ações</span>
-    </div>
-
-    {/* Linhas */}
-    {filteredAndSortedServices.map((service) => {
-      const hasDiscount = service.discount_percent && service.discount_percent > 0;
-      const finalPrice = applyDiscount(service.price, service.discount_percent);
-
-      return (
-        <div
-          key={service.id}
-          className="
-            grid grid-cols-[2fr,1fr,1fr,1fr,1fr]
-            items-center gap-4
-            px-6 py-4
-            border-t border-gray-800
-            hover:bg-gray-800/40 transition
-          "
-        >
-          {/* Nome + Descrição */}
-          <div className="flex flex-col">
-            <span className="text-white font-semibold">{service.name}</span>
-            {service.description && (
-              <span className="text-gray-500 text-sm truncate max-w-[260px]">
-                {service.description}
-              </span>
-            )}
-          </div>
-
-          {/* Duração */}
-          <div className="text-center text-gray-300">
-            {service.duration_minutes ?? 60} min
-          </div>
-
-          {/* Preço + desconto */}
-          <div className="text-center">
-            <span className="text-[#D6C6AA] font-bold block">
-              R$ {formatCurrency(finalPrice)}
+      {/* Listagem */}
+      {services.length === 0 ? (
+        <p className="text-gray-400">
+          Nenhum serviço cadastrado ainda. Adicione um novo para começar.
+        </p>
+      ) : (
+        <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden shadow-lg">
+          {/* Cabeçalho */}
+          <div className="grid grid-cols-[2fr,1fr,1.3fr,1fr,1.2fr,1.2fr] px-6 py-3 bg-gray-800 text-gray-400 text-sm font-semibold">
+            <span>Serviço</span>
+            <span className="flex items-center gap-1 justify-center">
+              <Clock className="w-4 h-4 text-gray-400" />
+              Duração
             </span>
-
-            {hasDiscount && (
-              <span className="text-xs text-red-400 font-medium block">
-                De R$ {formatCurrency(service.price)} • {service.discount_percent}% OFF
-              </span>
-            )}
+            <span className="text-center">Preço</span>
+            <span className="text-center">Desconto</span>
+            <span className="text-center">Imagem</span>
+            <span className="text-right">Ações</span>
           </div>
 
-          {/* Imagem */}
-          <div className="flex justify-center">
-            <img
-              src={
-                service.image_url ||
-                "https://via.placeholder.com/80/333/d6c6aa?text=IMG"
-              }
-              className="w-14 h-14 rounded-lg object-cover border border-gray-700 shadow"
-              alt={service.name}
-            />
-          </div>
+          {/* Linhas */}
+          <div>
+            {filteredAndSortedServices.map((service) => {
+              const hasDiscount =
+                service.discount_percent != null &&
+                service.discount_percent > 0;
+              const finalPrice = applyDiscount(
+                service.price,
+                service.discount_percent
+              );
 
-          {/* Botões */}
-          <div className="flex justify-end gap-2">
-            <button
-              onClick={() => openEditModal(service)}
-              className="px-3 py-1 rounded-md bg-blue-600 text-sm text-white hover:bg-blue-700 transition flex items-center gap-1"
-            >
-              <Edit className="w-4 h-4" /> Editar
-            </button>
+              return (
+                <div
+                  key={service.id}
+                  className="grid grid-cols-[2fr,1fr,1.3fr,1fr,1.2fr,1.2fr] items-center gap-4 px-6 py-4 border-t border-gray-800 hover:bg-gray-800/40 transition"
+                >
+                  {/* Nome + descrição */}
+                  <div>
+                    <p className="text-white font-semibold">{service.name}</p>
+                    {service.description && (
+                      <p className="text-gray-500 text-sm truncate max-w-[320px]">
+                        {service.description}
+                      </p>
+                    )}
+                  </div>
 
-            <button
-              onClick={() => handleDelete(service.id)}
-              className="px-3 py-1 rounded-md bg-red-600 text-sm text-white hover:bg-red-700 transition flex items-center gap-1"
-            >
-              <Trash2 className="w-4 h-4" /> Deletar
-            </button>
+                  {/* Duração */}
+                  <div className="text-gray-300 text-center">
+                    {service.duration_minutes || 60} min
+                  </div>
+
+                  {/* Preço + valor final */}
+                  <div className="text-center space-y-1">
+                    {hasDiscount && (
+                      <p className="text-xs text-gray-500 line-through">
+                        R$ {formatCurrency(service.price)}
+                      </p>
+                    )}
+                    <p className="text-[#D6C6AA] font-bold">
+                      R$ {formatCurrency(finalPrice)}
+                    </p>
+                  </div>
+
+                  {/* Desconto (badge verde) */}
+                  <div className="flex flex-col items-center gap-1">
+                    {hasDiscount ? (
+                      <>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-600/20 text-emerald-300 border border-emerald-500/50">
+                          {service.discount_percent}% OFF
+                        </span>
+                        <span className="text-[11px] text-gray-500">
+                          De R$ {formatCurrency(service.price)}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-sm text-gray-500">Sem desconto</span>
+                    )}
+                  </div>
+
+                  {/* Mini Imagem */}
+                  <div className="flex justify-center">
+                    <img
+                      src={
+                        service.image_url ||
+                        "https://via.placeholder.com/80x80/333/d6c6aa?text=IMG"
+                      }
+                      alt={service.name}
+                      className="w-16 h-16 rounded-lg object-cover border border-gray-700"
+                    />
+                  </div>
+
+                  {/* Ações */}
+                  <div className="flex justify-end gap-3">
+                    <button
+                      onClick={() => openEditModal(service)}
+                      className="px-3 py-1 rounded-md bg-blue-600 text-sm text-white hover:bg-blue-700 transition flex items-center gap-1"
+                    >
+                      <Edit className="w-4 h-4" />
+                      Editar
+                    </button>
+
+                    <button
+                      onClick={() => handleDelete(service.id)}
+                      className="px-3 py-1 rounded-md bg-red-600 text-sm text-white hover:bg-red-700 transition flex items-center gap-1"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Deletar
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
-      );
-    })}
-  </div>
-)}
+      )}
+
       {/* Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-xl backdrop-saturate-200 flex items-center justify-center z-50 p-4 animate-fadeIn">
