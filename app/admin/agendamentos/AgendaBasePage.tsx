@@ -60,6 +60,23 @@ interface RescheduleState {
   service_id: string;
 }
 
+interface CompleteState {
+  open: boolean;
+  appointmentId: string;
+  amount: number;
+  method: string;
+}
+
+const WEEK_DAYS = [
+  "Domingo",
+  "Segunda-feira",
+  "Terça-feira",
+  "Quarta-feira",
+  "Quinta-feira",
+  "Sexta-feira",
+  "Sábado",
+];
+
 export default function AgendaBasePage({
   title,
   statusFilter,
@@ -80,9 +97,14 @@ export default function AgendaBasePage({
     service_id: "",
   });
 
-  useEffect(() => {
-    load();
-  }, [statusFilter]);
+  const [completeModal, setCompleteModal] = useState<CompleteState>({
+    open: false,
+    appointmentId: "",
+    amount: 0,
+    method: "Pix", // ✅ padrão Pix
+  });
+
+  const today = new Date();
 
   /* ============================================
    * Helpers visuais / util
@@ -114,18 +136,26 @@ export default function AgendaBasePage({
     }
   };
 
-function formatAppointmentDateTime(iso: string) {
-  if (!iso) return "";
+  function formatAppointmentDateTime(iso: string) {
+    if (!iso) return "";
 
-  // O Supabase já devolve a data em UTC corretamente.
-  const d = new Date(iso);
+    const d = new Date(iso);
 
-  return d.toLocaleString("pt-BR", {
-    timeZone: "America/Sao_Paulo",
-    dateStyle: "short",
-    timeStyle: "short",
-  });
-}
+    return d.toLocaleString("pt-BR", {
+      timeZone: "America/Sao_Paulo",
+      dateStyle: "short",
+      timeStyle: "short",
+    });
+  }
+
+  const isSameDay = (iso: string, ref: Date) => {
+    const d = new Date(iso);
+    return (
+      d.getFullYear() === ref.getFullYear() &&
+      d.getMonth() === ref.getMonth() &&
+      d.getDate() === ref.getDate()
+    );
+  };
 
   /* ============================================
    * Carregar dados
@@ -183,25 +213,36 @@ function formatAppointmentDateTime(iso: string) {
     }
   }
 
+  useEffect(() => {
+    load();
+  }, [statusFilter]);
+
   /* ============================================
-   * Ações (status / delete / reagendar)
+   * Ações (status / delete / reagendar / concluir + financeiro)
    * ============================================ */
   const updateAppointmentStatus = async (
     id: string,
-    newStatus: Appointment["status"]
+    newStatus: Appointment["status"],
+    opts?: { markPaid?: boolean; method?: string; amount?: number }
   ) => {
     try {
       const res = await fetch("/api/admin/update-status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, status: newStatus }),
+        body: JSON.stringify({
+          id,
+          status: newStatus,
+          markPaid: opts?.markPaid ?? false,
+          method: opts?.method,
+          amount: opts?.amount,
+        }),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro ao atualizar status");
 
       showNotification("✅ Status atualizado com sucesso!");
-      load();
+      await load();
     } catch (err) {
       console.error(err);
       showNotification("❌ Erro ao atualizar status");
@@ -284,25 +325,44 @@ function formatAppointmentDateTime(iso: string) {
     }
   };
 
+  const handleOpenCompleteModal = (appt: Appointment) => {
+    const service: any = appt.services;
+    const amount = Number(service?.price || 0);
+
+    setCompleteModal({
+      open: true,
+      appointmentId: appt.id,
+      amount,
+      method: "Pix", // ✅ padrão Pix
+    });
+  };
+
+  const handleConfirmComplete = async () => {
+    if (!completeModal.appointmentId) return;
+
+    await updateAppointmentStatus(completeModal.appointmentId, "completed", {
+      markPaid: true,
+      method: completeModal.method,
+      amount: completeModal.amount,
+    });
+
+    setCompleteModal({
+      open: false,
+      appointmentId: "",
+      amount: 0,
+      method: "Pix",
+    });
+  };
+
   /* ============================================
-   * Agrupamento + busca
+   * Agrupamento + busca + contador de hoje
    * ============================================ */
   function groupByDay(list: Appointment[]) {
-    const days = [
-      "Domingo",
-      "Segunda-feira",
-      "Terça-feira",
-      "Quarta-feira",
-      "Quinta-feira",
-      "Sexta-feira",
-      "Sábado",
-    ];
-
     const groups: Record<string, Appointment[]> = {};
 
     list.forEach((appt) => {
       const d = new Date(appt.start_time);
-      const day = days[d.getDay()];
+      const day = WEEK_DAYS[d.getDay()];
       if (!groups[day]) groups[day] = [];
       groups[day].push(appt);
     });
@@ -325,6 +385,16 @@ function formatAppointmentDateTime(iso: string) {
 
   const grouped = groupByDay(filteredBySearch);
 
+  // 🔴 contador de agendamentos de HOJE (não concluídos / não cancelados)
+  const todaysPendingCount = appointments.filter(
+    (appt) =>
+      isSameDay(appt.start_time, today) &&
+      appt.status !== "completed" &&
+      appt.status !== "cancelled"
+  ).length;
+
+  const todayWeekdayName = WEEK_DAYS[today.getDay()];
+
   /* ============================================
    * Render
    * ============================================ */
@@ -343,6 +413,11 @@ function formatAppointmentDateTime(iso: string) {
             className="bg-gray-800 text-gray-200 px-4 py-2 rounded-lg hover:bg-gray-700"
           >
             Ativos
+            {statusFilter === "active" && todaysPendingCount > 0 && (
+              <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 text-[11px] font-bold rounded-full bg-red-600 text-white">
+                {todaysPendingCount}
+              </span>
+            )}
           </Link>
           <Link
             href="/admin/agendamentos/concluidos"
@@ -374,7 +449,16 @@ function formatAppointmentDateTime(iso: string) {
 
       {/* TÍTULO + BUSCA */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-        <h2 className="text-3xl font-bold text-[#D6C6AA]">{title}</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-3xl font-bold text-[#D6C6AA]">{title}</h2>
+
+          {/* Badge vermelho de hoje no título também (opcional) */}
+          {statusFilter === "active" && todaysPendingCount > 0 && (
+            <span className="inline-flex items-center justify-center px-2 py-0.5 text-[11px] font-bold rounded-full bg-red-600 text-white">
+              {todaysPendingCount} hoje
+            </span>
+          )}
+        </div>
 
         <input
           type="text"
@@ -431,6 +515,13 @@ function formatAppointmentDateTime(iso: string) {
                         <span className="text-[#D6C6AA] font-semibold">
                           {dayName}
                         </span>
+
+                        {/* Badge "Hoje" no header do dia atual */}
+                        {dayName === todayWeekdayName && (
+                          <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 text-[11px] font-bold rounded-full bg-red-600 text-white">
+                            Hoje
+                          </span>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -457,10 +548,18 @@ function formatAppointmentDateTime(iso: string) {
                       ? "Pendente"
                       : "Falhou";
 
+                    const isTodayRow =
+                      isSameDay(appt.start_time, today) &&
+                      appt.status !== "completed";
+
                     return (
                       <tr
                         key={appt.id}
-                        className="hover:bg-gray-800/60 transition"
+                        className={`hover:bg-gray-800/60 transition ${
+                          isTodayRow
+                            ? "border-l-4 border-red-500 bg-red-500/5"
+                            : ""
+                        }`}
                       >
                         {/* Cliente */}
                         <td className="px-6 py-4">
@@ -520,11 +619,9 @@ function formatAppointmentDateTime(iso: string) {
                           {service?.price != null && (
                             <p className="text-sm text-gray-400">
                               R{" "}
-                              {`${
-                                Number(service.price || 0)
-                                  .toFixed(2)
-                                  .replace(".", ",")
-                              }`}
+                              {`${Number(service.price || 0)
+                                .toFixed(2)
+                                .replace(".", ",")}`}
                             </p>
                           )}
                         </td>
@@ -577,11 +674,9 @@ function formatAppointmentDateTime(iso: string) {
 
                             {canConclude && (
                               <button
-                                onClick={() =>
-                                  updateAppointmentStatus(appt.id, "completed")
-                                }
+                                onClick={() => handleOpenCompleteModal(appt)}
                                 className="text-blue-400 hover:text-blue-600"
-                                title="Concluir"
+                                title="Concluir (lançar financeiro)"
                               >
                                 <Clock className="w-5 h-5" />
                               </button>
@@ -603,6 +698,88 @@ function formatAppointmentDateTime(iso: string) {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* MODAL DE CONCLUSÃO + PAGAMENTO */}
+      {completeModal.open && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 p-6 rounded-lg border border-gray-700 w-full max-w-sm">
+            <h3 className="text-xl font-bold text-[#D6C6AA] mb-4">
+              Concluir agendamento
+            </h3>
+
+            <p className="text-sm text-gray-300 mb-3">
+              Ao concluir, o agendamento será marcado como{" "}
+              <span className="font-semibold">Concluído</span> e será lançado
+              automaticamente no <span className="font-semibold">Financeiro</span>{" "}
+              como <span className="font-semibold">Pago</span>.
+            </p>
+
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="block text-sm text-gray-300 mb-1">
+                  Valor
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={completeModal.amount}
+                  onChange={(e) =>
+                    setCompleteModal((prev) => ({
+                      ...prev,
+                      amount: Number(e.target.value || 0),
+                    }))
+                  }
+                  className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-600 text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-300 mb-1">
+                  Método de pagamento
+                </label>
+                <select
+                  value={completeModal.method}
+                  onChange={(e) =>
+                    setCompleteModal((prev) => ({
+                      ...prev,
+                      method: e.target.value,
+                    }))
+                  }
+                  className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-600 text-white"
+                >
+                  <option value="Pix">Pix</option>
+                  <option value="Cartão">Cartão</option>
+                  <option value="Dinheiro">Dinheiro</option>
+                  <option value="Transferência">Transferência</option>
+                  <option value="Outro">Outro</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() =>
+                  setCompleteModal({
+                    open: false,
+                    appointmentId: "",
+                    amount: 0,
+                    method: "Pix",
+                  })
+                }
+                className="bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-600"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmComplete}
+                className="bg-[#D6C6AA] text-black px-4 py-2 rounded-lg hover:bg-[#e8dcbf]"
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
