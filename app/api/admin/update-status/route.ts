@@ -1,6 +1,16 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
+function mapPaymentStatus(markPaid: boolean | undefined, incoming?: string | null) {
+  if (markPaid === true) return "pago";      // válido
+  if (incoming) {
+    const v = incoming.toLowerCase();
+    if (["pendente", "pending"].includes(v)) return "pendente";
+    if (["pago", "paid", "approved"].includes(v)) return "pago";
+  }
+  return "pendente";
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -13,7 +23,7 @@ export async function POST(req: Request) {
     }: {
       id: string;
       status: string;
-      markPaid?: boolean;  // true = pago, false = pendente
+      markPaid?: boolean;
       method?: string;
       amount?: number;
     } = body;
@@ -25,17 +35,15 @@ export async function POST(req: Request) {
       );
     }
 
-    // ---------------------------------------------------------------
-    // 1) Atualiza o agendamento (status + payment_status)
-    // ---------------------------------------------------------------
-    const updates: any = {
-      status,
-      payment_status: markPaid ? "paid" : "pending",
-    };
+    // 🔥 Convertendo o estado de pagamento pro formato ACEITO pelo banco
+    const normalizedPayment = mapPaymentStatus(markPaid);
 
     const { data: appt, error: apptErr } = await supabaseAdmin
       .from("appointments")
-      .update(updates)
+      .update({
+        status,
+        payment_status: normalizedPayment,
+      })
       .eq("id", id)
       .select(`
         id,
@@ -50,51 +58,9 @@ export async function POST(req: Request) {
       throw apptErr || new Error("Agendamento não encontrado");
     }
 
-    // ---------------------------------------------------------------
-    // 2) Descobrir valor correto (se não mandou "amount")
-    // ---------------------------------------------------------------
-    const serviceObj = Array.isArray(appt.services)
-      ? appt.services[0]
-      : appt.services;
-
-    const servicePrice = Number(serviceObj?.price || 0);
-
-    const finalAmount =
-      typeof amount === "number" && amount > 0
-        ? amount
-        : servicePrice;
-
-    // ---------------------------------------------------------------
-    // 3) Criar registro financeiro (payments)
-    //    → Mesmo se NÃO tiver pago, cria PENDENTE
-    // ---------------------------------------------------------------
-    const now = new Date().toISOString();
-
-    const paymentPayload = {
-      appointment_id: appt.id,
-      invoice_id: null,
-      client_id: appt.client_id,
-      professional_id: appt.professional_id,
-      service_id: appt.service_id,
-      amount: finalAmount,
-
-      // 🔥 LÓGICA IMPORTANTE
-      method: markPaid ? method || "Pix" : null,
-      status: markPaid ? "approved" : "pending",
-      payment_date: markPaid ? now : null,
-
-      created_at: now,
-    };
-
-    const { error: payErr } = await supabaseAdmin
-      .from("payments")
-      .insert([paymentPayload]);
-
-    if (payErr) throw payErr;
-
     return NextResponse.json({ ok: true });
   } catch (err: any) {
-    console.error("Erro ao atualizar status:", err);
+    console.error("Erro ao atualizar:", err);
     return NextResponse.json(
       { error: err?.message || "Erro interno" },
       { status: 500 }

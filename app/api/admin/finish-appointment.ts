@@ -1,12 +1,23 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
+function normalizePaymentStatus(value: string | undefined | null) {
+  if (!value) return "pendente";
+
+  const v = value.toLowerCase();
+
+  if (["paid", "pago", "approved"].includes(v)) return "pago";
+  if (["pending", "pendente"].includes(v)) return "pendente";
+
+  return "pendente";
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const {
       id,
       status,
-      payment_status,    // "paid" | "pending"
+      payment_status,
       value,
       client_id,
       professional_id,
@@ -23,30 +34,25 @@ export async function POST(req: Request) {
     }
 
     // -----------------------------------------------------
-    // NORMALIZA STATUS DO PAGAMENTO
+    // 1) NORMALIZA STATUS DO PAGAMENTO
     // -----------------------------------------------------
-    const normalizedPayment =
-      payment_status === "paid" ||
-      payment_status === "approved" ||
-      payment_status === "pago"
-        ? "paid"
-        : "pending";
+    const normalized = normalizePaymentStatus(payment_status);
 
     // -----------------------------------------------------
-    // 1) ATUALIZA O AGENDAMENTO
+    // 2) ATUALIZA O AGENDAMENTO
     // -----------------------------------------------------
     const { error: updateErr } = await supabaseAdmin
       .from("appointments")
       .update({
         status,
-        payment_status: normalizedPayment,
+        payment_status: normalized, // agora SEM ERRO
       })
       .eq("id", id);
 
     if (updateErr) throw updateErr;
 
     // -----------------------------------------------------
-    // 2) CRIA LANÇAMENTO FINANCEIRO
+    // 3) CRIA LANÇAMENTO FINANCEIRO
     // -----------------------------------------------------
     const now = new Date().toISOString();
 
@@ -58,9 +64,9 @@ export async function POST(req: Request) {
       type: "income",
       description: `Serviço: ${service_name}`,
       value,
-      status: normalizedPayment === "paid" ? "approved" : "pending",
-      method: normalizedPayment === "paid" ? method || "Pix" : null,
-      payment_date: normalizedPayment === "paid" ? now : null,
+      status: normalized === "pago" ? "approved" : "pending",
+      method: normalized === "pago" ? method || "Pix" : null,
+      payment_date: normalized === "pago" ? now : null,
       created_at: now,
     };
 
@@ -71,7 +77,6 @@ export async function POST(req: Request) {
     if (financeErr) throw financeErr;
 
     return Response.json({ ok: true });
-
   } catch (err: any) {
     console.error("Erro ao finalizar agendamento:", err);
     return Response.json({ error: err.message }, { status: 500 });

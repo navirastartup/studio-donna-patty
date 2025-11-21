@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import React, { useState, useEffect } from "react";
 import Image from "next/image";
@@ -13,6 +13,9 @@ import {
 } from "lucide-react";
 import { CalendarDays } from "lucide-react";
 
+/* ============================================================
+ * Tipos
+ * ============================================================ */
 interface Appointment {
   id: string;
   start_time: string;
@@ -65,8 +68,12 @@ interface CompleteState {
   appointmentId: string;
   amount: number;
   method: string;
+  paymentStatus: "pago" | "pendente";
 }
 
+/* ============================================================
+ * Constantes
+ * ============================================================ */
 const WEEK_DAYS = [
   "Domingo",
   "Segunda-feira",
@@ -77,6 +84,9 @@ const WEEK_DAYS = [
   "Sábado",
 ];
 
+/* ============================================================
+ * Componente principal
+ * ============================================================ */
 export default function AgendaBasePage({
   title,
   statusFilter,
@@ -88,6 +98,7 @@ export default function AgendaBasePage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+
   const [reschedule, setReschedule] = useState<RescheduleState>({
     id: "",
     newDate: "",
@@ -101,14 +112,15 @@ export default function AgendaBasePage({
     open: false,
     appointmentId: "",
     amount: 0,
-    method: "Pix", // ✅ padrão Pix
+    method: "Pix",
+    paymentStatus: "pago",
   });
 
   const today = new Date();
 
-  /* ============================================
-   * Helpers visuais / util
-   * ============================================ */
+  /* ============================================================
+   * Função de notificação
+   * ============================================================ */
   const showNotification = (message: string) => {
     const toast = document.createElement("div");
     toast.className =
@@ -136,17 +148,15 @@ export default function AgendaBasePage({
     }
   };
 
-  function formatAppointmentDateTime(iso: string) {
+  const formatAppointmentDateTime = (iso: string) => {
     if (!iso) return "";
-
     const d = new Date(iso);
-
     return d.toLocaleString("pt-BR", {
       timeZone: "America/Sao_Paulo",
       dateStyle: "short",
       timeStyle: "short",
     });
-  }
+  };
 
   const isSameDay = (iso: string, ref: Date) => {
     const d = new Date(iso);
@@ -157,9 +167,9 @@ export default function AgendaBasePage({
     );
   };
 
-  /* ============================================
-   * Carregar dados
-   * ============================================ */
+  /* ============================================================
+   * Carregar agendamentos
+   * ============================================================ */
   async function load() {
     try {
       setLoading(true);
@@ -191,6 +201,7 @@ export default function AgendaBasePage({
       }
 
       const { data, error } = await query;
+
       if (error) throw error;
 
       const parsed = (data || []).map((item: any): Appointment => ({
@@ -217,9 +228,9 @@ export default function AgendaBasePage({
     load();
   }, [statusFilter]);
 
-  /* ============================================
-   * Ações (status / delete / reagendar / concluir + financeiro)
-   * ============================================ */
+  /* ============================================================
+   * Atualizar status + financeiro
+   * ============================================================ */
   const updateAppointmentStatus = async (
     id: string,
     newStatus: Appointment["status"],
@@ -241,7 +252,7 @@ export default function AgendaBasePage({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro ao atualizar status");
 
-      showNotification("✅ Status atualizado com sucesso!");
+      showNotification("✅ Status atualizado!");
       await load();
     } catch (err) {
       console.error(err);
@@ -249,82 +260,9 @@ export default function AgendaBasePage({
     }
   };
 
-  const deleteAppointment = async (id: string) => {
-    if (!confirm("Deseja excluir este agendamento?")) return;
-
-    try {
-      const res = await fetch("/api/appointments/delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Erro ao excluir agendamento");
-
-      showNotification("🗑️ Agendamento excluído!");
-      load();
-    } catch (err) {
-      console.error(err);
-      showNotification("❌ Erro ao excluir agendamento");
-    }
-  };
-
-  const fetchAvailableSlots = async (
-    date: string,
-    professional_id: string,
-    service_id: string
-  ) => {
-    if (!date) return;
-    try {
-      const res = await fetch("/api/appointments/available", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date, professional_id, service_id }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Erro ao buscar horários");
-
-      setReschedule((prev) => ({ ...prev, slots: data.available || [] }));
-    } catch (err) {
-      console.error(err);
-      setReschedule((prev) => ({ ...prev, slots: [] }));
-    }
-  };
-
-  const rescheduleAppointment = async () => {
-    if (!reschedule.id || !reschedule.selectedSlot) return;
-
-    try {
-      const res = await fetch("/api/appointments/reschedule", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: reschedule.id,
-          newDate: reschedule.selectedSlot,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Erro ao reagendar");
-
-      showNotification("📅 Agendamento reagendado!");
-      setReschedule({
-        id: "",
-        newDate: "",
-        slots: [],
-        selectedSlot: "",
-        professional_id: "",
-        service_id: "",
-      });
-      load();
-    } catch (err) {
-      console.error(err);
-      showNotification("❌ Erro ao reagendar");
-    }
-  };
-
+  /* ============================================================
+   * Modal CONCLUIR → abre com preço do serviço
+   * ============================================================ */
   const handleOpenCompleteModal = (appt: Appointment) => {
     const service: any = appt.services;
     const amount = Number(service?.price || 0);
@@ -333,30 +271,60 @@ export default function AgendaBasePage({
       open: true,
       appointmentId: appt.id,
       amount,
-      method: "Pix", // ✅ padrão Pix
+      method: "Pix",
+      paymentStatus: "pago",
     });
   };
 
+  /* ============================================================
+   * Confirmar conclusão
+   * ============================================================ */
   const handleConfirmComplete = async () => {
     if (!completeModal.appointmentId) return;
 
-await updateAppointmentStatus(completeModal.appointmentId, "completed", {
-  markPaid: completeModal.method !== "PENDENTE",
-  method: completeModal.method === "PENDENTE" ? "pending" : completeModal.method,
-  amount: completeModal.amount,
-});
+    await updateAppointmentStatus(completeModal.appointmentId, "completed", {
+      markPaid: completeModal.paymentStatus === "pago",
+      method: completeModal.method,
+      amount: completeModal.amount,
+    });
 
     setCompleteModal({
       open: false,
       appointmentId: "",
       amount: 0,
       method: "Pix",
+      paymentStatus: "pago",
     });
   };
 
-  /* ============================================
-   * Agrupamento + busca + contador de hoje
-   * ============================================ */
+/* ============================================================
+ * Excluir agendamento
+ * ============================================================ */
+const deleteAppointment = async (id: string) => {
+  if (!confirm("Deseja excluir este agendamento?")) return;
+
+  try {
+    const res = await fetch("/api/appointments/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Erro ao excluir");
+
+    showNotification("🗑️ Agendamento excluído!");
+    await load();
+  } catch (err) {
+    console.error(err);
+    showNotification("❌ Erro ao excluir agendamento");
+  }
+};
+
+
+  /* ============================================================
+   * Agrupar por dia
+   * ============================================================ */
   function groupByDay(list: Appointment[]) {
     const groups: Record<string, Appointment[]> = {};
 
@@ -385,7 +353,6 @@ await updateAppointmentStatus(completeModal.appointmentId, "completed", {
 
   const grouped = groupByDay(filteredBySearch);
 
-  // 🔴 contador de agendamentos de HOJE (não concluídos / não cancelados)
   const todaysPendingCount = appointments.filter(
     (appt) =>
       isSameDay(appt.start_time, today) &&
@@ -395,17 +362,16 @@ await updateAppointmentStatus(completeModal.appointmentId, "completed", {
 
   const todayWeekdayName = WEEK_DAYS[today.getDay()];
 
-  /* ============================================
+  /* ============================================================
    * Render
-   * ============================================ */
-
+   * ============================================================ */
   if (loading)
     return <p className="text-[#D6C6AA] p-6">Carregando agendamentos...</p>;
   if (error) return <p className="text-red-500 p-6">Erro: {error}</p>;
 
   return (
     <div className="p-6">
-      {/* MENU ENTRE ROTAS */}
+      {/* MENU */}
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div className="flex flex-wrap gap-3">
           <Link
@@ -419,18 +385,21 @@ await updateAppointmentStatus(completeModal.appointmentId, "completed", {
               </span>
             )}
           </Link>
+
           <Link
             href="/admin/agendamentos/concluidos"
             className="bg-gray-800 text-gray-200 px-4 py-2 rounded-lg hover:bg-gray-700"
           >
             Concluídos
           </Link>
+
           <Link
             href="/admin/agendamentos/cancelados"
             className="bg-gray-800 text-gray-200 px-4 py-2 rounded-lg hover:bg-gray-700"
           >
             Cancelados
           </Link>
+
           <Link
             href="/admin/agendamentos/reagendados"
             className="bg-gray-800 text-gray-200 px-4 py-2 rounded-lg hover:bg-gray-700"
@@ -447,12 +416,11 @@ await updateAppointmentStatus(completeModal.appointmentId, "completed", {
         </Link>
       </div>
 
-      {/* TÍTULO + BUSCA */}
+      {/* TÍTULO */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
         <div className="flex items-center gap-2">
           <h2 className="text-3xl font-bold text-[#D6C6AA]">{title}</h2>
 
-          {/* Badge vermelho de hoje no título também (opcional) */}
           {statusFilter === "active" && todaysPendingCount > 0 && (
             <span className="inline-flex items-center justify-center px-2 py-0.5 text-[11px] font-bold rounded-full bg-red-600 text-white">
               {todaysPendingCount} hoje
@@ -465,343 +433,349 @@ await updateAppointmentStatus(completeModal.appointmentId, "completed", {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar cliente..."
-          className="w-full md:w-80 px-4 py-2 rounded-lg bg-gray-900 border border-gray-700 text-gray-100 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-[#D6C6AA]"
+          className="w-full md:w-80 px-4 py-2 rounded-lg bg-gray-900 border border-gray-700 text-gray-100"
         />
       </div>
 
-      {/* TABELA */}
-      {filteredBySearch.length === 0 ? (
-        <p className="text-gray-400">Nenhum agendamento encontrado.</p>
-      ) : (
-        <div className="bg-gray-900 rounded-lg shadow-md overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-700">
-            <thead className="bg-gray-800">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs text-gray-400 uppercase">
-                  Cliente
-                </th>
-                <th className="px-6 py-3 text-left text-xs text-gray-400 uppercase">
-                  Profissional
-                </th>
-                <th className="px-6 py-3 text-left text-xs text-gray-400 uppercase">
-                  Serviço
-                </th>
-                <th className="px-6 py-3 text-left text-xs text-gray-400 uppercase">
-                  Data / Hora
-                </th>
-                <th className="px-6 py-3 text-left text-xs text-gray-400 uppercase">
-                  Pagamento
-                </th>
-                <th className="px-6 py-3 text-left text-xs text-gray-400 uppercase">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-right text-xs text-gray-400 uppercase">
-                  Ações
-                </th>
-              </tr>
-            </thead>
+      {/* LISTA */}
+      <div className="bg-gray-900 rounded-lg shadow-md overflow-hidden">
+        <table className="min-w-full divide-y divide-gray-700">
+          <thead className="bg-gray-800">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs text-gray-400 uppercase">
+                Cliente
+              </th>
+              <th className="px-6 py-3 text-left text-xs text-gray-400 uppercase">
+                Profissional
+              </th>
+              <th className="px-6 py-3 text-left text-xs text-gray-400 uppercase">
+                Serviço
+              </th>
+              <th className="px-6 py-3 text-left text-xs text-gray-400 uppercase">
+                Data / Hora
+              </th>
+              <th className="px-6 py-3 text-left text-xs text-gray-400 uppercase">
+                Pagamento
+              </th>
+              <th className="px-6 py-3 text-left text-xs text-gray-400 uppercase">
+                Status
+              </th>
+              <th className="px-6 py-3 text-right text-xs text-gray-400 uppercase">
+                Ações
+              </th>
+            </tr>
+          </thead>
 
-            <tbody className="divide-y divide-gray-800">
-              {Object.entries(grouped).map(([dayName, appts]) => (
-                <React.Fragment key={dayName}>
-                  {/* Header do dia */}
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="px-6 py-4 bg-gray-950 border-y border-gray-800"
-                    >
-                      <div className="flex items-center gap-2">
-                        <CalendarDays className="w-5 h-5 text-[#D6C6AA]" />
-                        <span className="text-[#D6C6AA] font-semibold">
-                          {dayName}
+          <tbody className="divide-y divide-gray-800">
+            {Object.entries(grouped).map(([dayName, appts]) => (
+              <React.Fragment key={dayName}>
+                <tr>
+                  <td
+                    colSpan={7}
+                    className="px-6 py-4 bg-gray-950 border-y border-gray-800"
+                  >
+                    <div className="flex items-center gap-2">
+                      <CalendarDays className="w-5 h-5 text-[#D6C6AA]" />
+                      <span className="text-[#D6C6AA] font-semibold">
+                        {dayName}
+                      </span>
+
+                      {dayName === todayWeekdayName && (
+                        <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 text-[11px] font-bold rounded-full bg-red-600 text-white">
+                          Hoje
                         </span>
+                      )}
+                    </div>
+                  </td>
+                </tr>
 
-                        {/* Badge "Hoje" no header do dia atual */}
-                        {dayName === todayWeekdayName && (
-                          <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 text-[11px] font-bold rounded-full bg-red-600 text-white">
-                            Hoje
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
+                {appts.map((appt) => {
+                  const service: any = appt.services;
+                  const professional: any = appt.professionals;
+                  const client: any = appt.clients;
 
-                  {/* Linhas do dia */}
-                  {appts.map((appt) => {
-                    const service: any = appt.services;
-                    const professional: any = appt.professionals;
-                    const client: any = appt.clients;
+                  const canConclude =
+                    appt.status !== "completed" &&
+                    appt.status !== "cancelled";
 
-                    const canConclude =
-                      appt.status !== "completed" &&
-                      appt.status !== "cancelled";
+                  const canReschedule = appt.status !== "cancelled";
 
-                    const canReschedule = appt.status !== "cancelled";
+                  const paymentText = ["pago", "paid"].includes(
+                    (appt.payment_status || "").toLowerCase()
+                  )
+                    ? "Pago"
+                    : ["pendente", "pending"].includes(
+                        (appt.payment_status || "").toLowerCase()
+                      )
+                    ? "Pendente"
+                    : "Falhou";
 
-                    const paymentText = ["pago", "paid"].includes(
-                      (appt.payment_status || "").toLowerCase()
-                    )
-                      ? "Pago"
-                      : ["pendente", "pending"].includes(
-                          (appt.payment_status || "").toLowerCase()
-                        )
-                      ? "Pendente"
-                      : "Falhou";
+                  const isTodayRow =
+                    isSameDay(appt.start_time, today) &&
+                    appt.status !== "completed";
 
-                    const isTodayRow =
-                      isSameDay(appt.start_time, today) &&
-                      appt.status !== "completed";
+                  return (
+                    <tr
+                      key={appt.id}
+                      className={`hover:bg-gray-800/60 transition ${
+                        isTodayRow
+                          ? "border-l-4 border-red-500 bg-red-500/5"
+                          : ""
+                      }`}
+                    >
+                      {/* CLIENTE */}
+                      <td className="px-6 py-4">
+                        <div className="text-white font-medium flex items-center gap-2">
+                          {client?.full_name}
 
-                    return (
-                      <tr
-                        key={appt.id}
-                        className={`hover:bg-gray-800/60 transition ${
-                          isTodayRow
-                            ? "border-l-4 border-red-500 bg-red-500/5"
-                            : ""
-                        }`}
-                      >
-                        {/* Cliente */}
-                        <td className="px-6 py-4">
-                          <div className="text-white font-medium flex items-center gap-2">
-                            {client?.full_name}
-                            {client?.phone && (
-                              <a
-                                href={`https://wa.me/55${client.phone.replace(
-                                  /\D/g,
-                                  ""
-                                )}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-green-400 hover:text-green-500"
-                                title="Conversar no WhatsApp"
-                              >
-                                <MessageCircle className="w-4 h-4" />
-                              </a>
-                            )}
-                          </div>
-                          <p className="text-sm text-gray-400">
-                            {client?.email}
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            {client?.phone}
-                          </p>
-                        </td>
-
-                        {/* Profissional */}
-                        <td className="px-6 py-4 flex items-center gap-3">
-                          {professional?.image_url ? (
-                            <Image
-                              src={professional.image_url}
-                              alt={professional.name}
-                              width={32}
-                              height={32}
-                              className="rounded-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-8 h-8 rounded-full bg-gray-700" />
-                          )}
-                          <div>
-                            <p className="text-white font-medium">
-                              {professional?.name}
-                            </p>
-                            <p className="text-sm text-gray-400">
-                              {professional?.specialty}
-                            </p>
-                          </div>
-                        </td>
-
-                        {/* Serviço */}
-                        <td className="px-6 py-4">
-                          <p className="text-white font-medium">
-                            {service?.name}
-                          </p>
-                          {service?.price != null && (
-                            <p className="text-sm text-gray-400">
-                              R{" "}
-                              {`${Number(service.price || 0)
-                                .toFixed(2)
-                                .replace(".", ",")}`}
-                            </p>
-                          )}
-                        </td>
-
-                        {/* Data / Hora */}
-                        <td className="px-6 py-4 text-gray-300">
-                          {formatAppointmentDateTime(appt.start_time)}
-                        </td>
-
-                        {/* Pagamento */}
-                        <td className="px-6 py-4 text-gray-300">
-                          {paymentText}
-                        </td>
-
-                        {/* Status */}
-                        <td className="px-6 py-4">
-                          <span
-                            className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(
-                              appt.status
-                            )}`}
-                          >
-                            {String(appt.status)
-                              .charAt(0)
-                              .toUpperCase() +
-                              String(appt.status).slice(1)}
-                          </span>
-                        </td>
-
-                        {/* Ações */}
-                        <td className="px-6 py-4 text-right">
-                          <div className="flex justify-end gap-2">
-                            {canReschedule && (
-                              <button
-                                onClick={() =>
-                                  setReschedule({
-                                    id: appt.id,
-                                    newDate: "",
-                                    slots: [],
-                                    selectedSlot: "",
-                                    professional_id: professional?.id || "",
-                                    service_id: service?.id || "",
-                                  })
-                                }
-                                className="text-yellow-400 hover:text-yellow-600"
-                                title="Reagendar"
-                              >
-                                <CalendarClock className="w-5 h-5" />
-                              </button>
-                            )}
-
-                            {canConclude && (
-                              <button
-                                onClick={() => handleOpenCompleteModal(appt)}
-                                className="text-blue-400 hover:text-blue-600"
-                                title="Concluir (lançar financeiro)"
-                              >
-                                <Clock className="w-5 h-5" />
-                              </button>
-                            )}
-
-                            <button
-                              onClick={() => deleteAppointment(appt.id)}
-                              className="text-red-500 hover:text-red-700"
-                              title="Excluir"
+                          {client?.phone && (
+                            <a
+                              href={`https://wa.me/55${client.phone.replace(
+                                /\D/g,
+                                ""
+                              )}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-green-400 hover:text-green-500"
+                              title="Conversar no WhatsApp"
                             >
-                              <Trash2 className="w-5 h-5" />
+                              <MessageCircle className="w-4 h-4" />
+                            </a>
+                          )}
+                        </div>
+
+                        <p className="text-sm text-gray-400">
+                          {client?.email}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {client?.phone}
+                        </p>
+                      </td>
+
+                      {/* PROFISSIONAL */}
+                      <td className="px-6 py-4 flex items-center gap-3">
+                        {professional?.image_url ? (
+                          <Image
+                            src={professional.image_url}
+                            alt={professional.name}
+                            width={32}
+                            height={32}
+                            className="rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-gray-700" />
+                        )}
+
+                        <div>
+                          <p className="text-white font-medium">
+                            {professional?.name}
+                          </p>
+                          <p className="text-sm text-gray-400">
+                            {professional?.specialty}
+                          </p>
+                        </div>
+                      </td>
+
+                      {/* SERVIÇO */}
+                      <td className="px-6 py-4">
+                        <p className="text-white font-medium">
+                          {service?.name}
+                        </p>
+
+                        {service?.price != null && (
+                          <p className="text-sm text-gray-400">
+                            R{" "}
+                            {`${Number(service.price || 0)
+                              .toFixed(2)
+                              .replace(".", ",")}`}
+                          </p>
+                        )}
+                      </td>
+
+                      {/* DATA */}
+                      <td className="px-6 py-4 text-gray-300">
+                        {formatAppointmentDateTime(appt.start_time)}
+                      </td>
+
+                      {/* PAGAMENTO */}
+                      <td className="px-6 py-4 text-gray-300">
+                        {paymentText}
+                      </td>
+
+                      {/* STATUS */}
+                      <td className="px-6 py-4">
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(
+                            appt.status
+                          )}`}
+                        >
+                          {String(appt.status)
+                            .charAt(0)
+                            .toUpperCase() +
+                            String(appt.status).slice(1)}
+                        </span>
+                      </td>
+
+                      {/* AÇÕES */}
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex justify-end gap-2">
+                          {canReschedule && (
+                            <button
+                              onClick={() =>
+                                setReschedule({
+                                  id: appt.id,
+                                  newDate: "",
+                                  slots: [],
+                                  selectedSlot: "",
+                                  professional_id: professional?.id || "",
+                                  service_id: service?.id || "",
+                                })
+                              }
+                              className="text-yellow-400 hover:text-yellow-600"
+                              title="Reagendar"
+                            >
+                              <CalendarClock className="w-5 h-5" />
                             </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
+                          )}
+
+                          {canConclude && (
+                            <button
+                              onClick={() => handleOpenCompleteModal(appt)}
+                              className="text-blue-400 hover:text-blue-600"
+                              title="Concluir"
+                            >
+                              <Clock className="w-5 h-5" />
+                            </button>
+                          )}
+
+                          <button
+                            onClick={() => deleteAppointment(appt.id)}
+                            className="text-red-500 hover:text-red-700"
+                            title="Excluir"
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* ============================================================
+       * MODAL DE CONCLUSÃO
+       * ============================================================ */}
+      {completeModal.open && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 p-6 rounded-lg border border-gray-700 w-full max-w-sm">
+            <h3 className="text-xl font-bold text-[#D6C6AA] mb-4">
+              Concluir agendamento
+            </h3>
+
+            <p className="text-sm text-gray-300 mb-3">
+              Ao concluir, o agendamento será marcado como{" "}
+              <span className="font-semibold">Concluído</span>. O lançamento
+              financeiro poderá ser{" "}
+              <span className="font-semibold">Pago</span> ou{" "}
+              <span className="font-semibold">Pendente</span>.
+            </p>
+
+            <div className="space-y-3 mb-4">
+              {/* Valor */}
+              <div>
+                <label className="block text-sm text-gray-300 mb-1">
+                  Valor
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={completeModal.amount}
+                  onChange={(e) =>
+                    setCompleteModal((prev) => ({
+                      ...prev,
+                      amount: Number(e.target.value || 0),
+                    }))
+                  }
+                  className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-600 text-white"
+                />
+              </div>
+
+              {/* Método */}
+              <div>
+                <label className="block text-sm text-gray-300 mb-1">
+                  Método de pagamento
+                </label>
+                <select
+                  value={completeModal.method}
+                  onChange={(e) =>
+                    setCompleteModal((prev) => ({
+                      ...prev,
+                      method: e.target.value,
+                    }))
+                  }
+                  className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-600 text-white"
+                >
+                  <option value="Pix">Pix</option>
+                  <option value="Cartão">Cartão</option>
+                  <option value="Dinheiro">Dinheiro</option>
+                  <option value="Transferência">Transferência</option>
+                  <option value="Outro">Outro</option>
+                </select>
+              </div>
+
+              {/* Status */}
+              <div>
+                <label className="block text-sm text-gray-300 mb-1">
+                  Status do Pagamento
+                </label>
+
+                <select
+                  value={completeModal.paymentStatus}
+                  onChange={(e) =>
+                    setCompleteModal((prev) => ({
+                      ...prev,
+                      paymentStatus: e.target.value as "pago" | "pendente",
+                    }))
+                  }
+                  className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-600 text-white mb-3"
+                >
+                  <option value="pago">Pago agora</option>
+                  <option value="pendente">Pendente (não pagar agora)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Botões */}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() =>
+                  setCompleteModal({
+                    open: false,
+                    appointmentId: "",
+                    amount: 0,
+                    method: "Pix",
+                    paymentStatus: "pago",
+                  })
+                }
+                className="bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-600"
+              >
+                Cancelar
+              </button>
+
+              <button
+                onClick={handleConfirmComplete}
+                className="bg-[#D6C6AA] text-black px-4 py-2 rounded-lg hover:bg-[#e8dcbf]"
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
         </div>
       )}
-
-      {/* MODAL DE CONCLUSÃO + PAGAMENTO */}
-{completeModal.open && (
-  <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-    <div className="bg-gray-900 p-6 rounded-lg border border-gray-700 w-full max-w-sm">
-      <h3 className="text-xl font-bold text-[#D6C6AA] mb-4">
-        Concluir agendamento
-      </h3>
-
-      <p className="text-sm text-gray-300 mb-3">
-        Ao concluir, o agendamento será marcado como{" "}
-        <span className="font-semibold">Concluído</span>. O lançamento financeiro
-        poderá ser marcado como <span className="font-semibold">Pago</span> ou{" "}
-        <span className="font-semibold">Pendente</span>.
-      </p>
-
-      <div className="space-y-3 mb-4">
-        <div>
-          <label className="block text-sm text-gray-300 mb-1">Valor</label>
-          <input
-            type="number"
-            step="0.01"
-            value={completeModal.amount}
-            onChange={(e) =>
-              setCompleteModal((prev) => ({
-                ...prev,
-                amount: Number(e.target.value || 0),
-              }))
-            }
-            className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-600 text-white"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm text-gray-300 mb-1">
-            Método de pagamento
-          </label>
-          <select
-            value={completeModal.method}
-            onChange={(e) =>
-              setCompleteModal((prev) => ({
-                ...prev,
-                method: e.target.value,
-              }))
-            }
-            className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-600 text-white"
-          >
-            <option value="Pix">Pix</option>
-            <option value="Cartão">Cartão</option>
-            <option value="Dinheiro">Dinheiro</option>
-            <option value="Transferência">Transferência</option>
-            <option value="Outro">Outro</option>
-          </select>
-        </div>
-
-        {/* AQUI — FORA DOS BOTÕES */}
-        <div>
-          <label className="block text-sm text-gray-300 mb-1">
-            Status do Pagamento
-          </label>
-          <select
-            value={completeModal.method === "PENDENTE" ? "pending" : "paid"}
-            onChange={(e) =>
-              setCompleteModal((prev) => ({
-                ...prev,
-                method: e.target.value === "pending" ? "PENDENTE" : prev.method,
-                markPaid: e.target.value === "paid",
-              }))
-            }
-            className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-600 text-white"
-          >
-            <option value="paid">Pago agora</option>
-            <option value="pending">Pendente (não pagar agora)</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="flex justify-end gap-2">
-        <button
-          onClick={() =>
-            setCompleteModal({
-              open: false,
-              appointmentId: "",
-              amount: 0,
-              method: "Pix",
-            })
-          }
-          className="bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-600"
-        >
-          Cancelar
-        </button>
-
-        <button
-          onClick={handleConfirmComplete}
-          className="bg-[#D6C6AA] text-black px-4 py-2 rounded-lg hover:bg-[#e8dcbf]"
-        >
-          Confirmar
-        </button>
-      </div>
-    </div>
-  </div>
-)}
     </div>
   );
 }
