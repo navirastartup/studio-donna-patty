@@ -225,117 +225,47 @@ export default function AgendamentoPage() {
     paymentValue,
   ]);
 
-  /* ============================================================
-   * Horários disponíveis
-   * ============================================================ */
-  useEffect(() => {
-    async function fetchAvailableSlots() {
-      if (!selectedDate || !selectedProfessional)
-        return setTimeSlots([]);
-
-      try {
-        const fullDate = new Date(
-          currentMonth.getFullYear(),
-          currentMonth.getMonth(),
-          selectedDate
-        );
-
-        const dayOfWeek = fullDate
-          .toLocaleDateString("en-US", { weekday: "long" })
-          .toLowerCase();
-
-        const schedule = availableSchedules.find(
-          (s) =>
-            s.day_of_week.toLowerCase() === dayOfWeek &&
-            (!s.professional_id ||
-              s.professional_id === selectedProfessional.id)
-        );
-
-        if (!schedule) return setTimeSlots([]);
-
-        const startHour = parseInt(schedule.start_time.slice(0, 2), 10);
-        const endHour = parseInt(schedule.end_time.slice(0, 2), 10);
-
-        const breakStartHour = schedule.break_start_time
-          ? parseInt(schedule.break_start_time.slice(0, 2), 10)
-          : -1;
-
-        const breakEndHour = schedule.break_end_time
-          ? parseInt(schedule.break_end_time.slice(0, 2), 10)
-          : -1;
-
-        const startOfDay = new Date(fullDate);
-        startOfDay.setHours(0, 0, 0, 0);
-
-        const endOfDay = new Date(fullDate);
-        endOfDay.setHours(23, 59, 59, 999);
-
-        const { data: existingAppointments } = await supabase
-          .from("appointments")
-          .select("start_time, end_time")
-          .eq("professional_id", selectedProfessional.id)
-          .gte("start_time", startOfDay.toISOString())
-          .lte("end_time", endOfDay.toISOString());
-
-        const toLocal = (d: string) =>
-          new Date(
-            new Date(d).getTime() -
-              new Date().getTimezoneOffset() * 60000
-          )
-            .toISOString()
-            .slice(11, 16);
-
-        const occupied = (existingAppointments ?? []).map((a) => ({
-          start: toLocal((a as any).start_time),
-          end: toLocal((a as any).end_time),
-        }));
-
-        const duration = Number(selectedService?.duration_minutes ?? 60);
-        const step = duration >= 60 ? 60 : 30;
-
-        const isOccupied = (time: string) => {
-          const [h, m] = time.split(":").map(Number);
-          const slotStart = h * 60 + m;
-          const slotEnd = slotStart + duration;
-
-          return occupied.some((b) => {
-            const [bh, bm] = b.start.split(":").map(Number);
-            const [eh, em] = b.end.split(":").map(Number);
-            const busyStart = bh * 60 + bm;
-            const busyEnd = eh * 60 + em;
-            return !(
-              slotEnd <= busyStart || slotStart >= busyEnd
-            );
-          });
-        };
-
-        const slots: string[] = [];
-
-        for (let h = startHour; h < endHour; h++) {
-          for (let m = 0; m < 60; m += step) {
-            if (h >= breakStartHour && h < breakEndHour) continue;
-
-            const time = `${String(h).padStart(2, "0")}:${String(
-              m
-            ).padStart(2, "0")}`;
-            if (!isOccupied(time)) slots.push(time);
-          }
-        }
-
-        setTimeSlots(slots);
-      } catch {
-        setTimeSlots([]);
-      }
+/* ============================================================
+ * Horários disponíveis
+ * ============================================================ */
+useEffect(() => {
+  async function fetchAvailableSlots() {
+    if (!selectedDate || !selectedProfessional || !selectedService) {
+      setTimeSlots([]);
+      return;
     }
 
-    fetchAvailableSlots();
-  }, [
-    selectedDate,
-    selectedProfessional,
-    availableSchedules,
-    currentMonth,
-    selectedService,
-  ]);
+    const yyyy = currentMonth.getFullYear();
+    const mm = String(currentMonth.getMonth() + 1).padStart(2, "0");
+    const dd = String(selectedDate).padStart(2, "0");
+
+    try {
+      const res = await fetch(
+        `/api/appointments/available?date=${yyyy}-${mm}-${dd}&professional_id=${selectedProfessional.id}&service_id=${selectedService.id}`
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        console.error("Erro ao buscar horários:", data.error);
+        setTimeSlots([]);
+        return;
+      }
+
+      setTimeSlots(data.available || []);
+    } catch (err) {
+      console.error("Falha:", err);
+      setTimeSlots([]);
+    }
+  }
+
+  fetchAvailableSlots();
+}, [
+  selectedDate,
+  selectedProfessional,
+  selectedService,
+  currentMonth
+]);
 
   /* ============================================================
    * Criar cliente caso não exista
