@@ -16,13 +16,23 @@ interface Service {
   id: string;
   name: string;
   description?: string;
-  price: number;
+  price: number;                // preço base (sem desconto)
   duration_minutes?: number;
   image_url?: string | null;
+  discount_percent?: number | null; // novo campo
 }
 
 type SortBy = "name" | "duration" | "price";
 type SortDir = "asc" | "desc";
+
+const formatCurrency = (value: number) =>
+  value.toFixed(2).replace(".", ",");
+
+const applyDiscount = (price: number, discount?: number | null) => {
+  if (!discount || discount <= 0) return price;
+  const final = price * (1 - discount / 100);
+  return Math.round(final * 100) / 100;
+};
 
 export default function AdminServicosPage() {
   const [services, setServices] = useState<Service[]>([]);
@@ -35,6 +45,7 @@ export default function AdminServicosPage() {
     description: "",
     price: "",
     duration_minutes: "60",
+    discount_percent: "",
   });
   const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
 
@@ -68,10 +79,20 @@ export default function AdminServicosPage() {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const openAddModal = () => {
-    setEditingService(null);
-    setForm({ name: "", description: "", price: "", duration_minutes: "60" });
+  const resetForm = () => {
+    setForm({
+      name: "",
+      description: "",
+      price: "",
+      duration_minutes: "60",
+      discount_percent: "",
+    });
     setCurrentImageUrl(null);
+    setEditingService(null);
+  };
+
+  const openAddModal = () => {
+    resetForm();
     setIsModalOpen(true);
   };
 
@@ -82,6 +103,10 @@ export default function AdminServicosPage() {
       description: service.description || "",
       price: service.price.toString(),
       duration_minutes: service.duration_minutes?.toString() || "60",
+      discount_percent:
+        service.discount_percent != null
+          ? service.discount_percent.toString()
+          : "",
     });
     setCurrentImageUrl(service.image_url || null);
     setIsModalOpen(true);
@@ -89,9 +114,8 @@ export default function AdminServicosPage() {
 
   const closeModal = () => {
     setIsModalOpen(false);
-    setEditingService(null);
-    setForm({ name: "", description: "", price: "", duration_minutes: "60" });
-    setCurrentImageUrl(null);
+    resetForm();
+    setError(null);
   };
 
   // Criar ou atualizar serviço
@@ -99,12 +123,19 @@ export default function AdminServicosPage() {
     e.preventDefault();
     setError(null);
 
+    const discountRaw = form.discount_percent.trim();
+    const discountParsed = discountRaw === "" ? null : Number(discountRaw);
+
     const serviceData = {
       name: form.name,
       description: form.description,
       price: parseFloat(form.price),
       duration_minutes: parseInt(form.duration_minutes, 10),
       image_url: currentImageUrl,
+      discount_percent:
+        discountParsed != null && !Number.isNaN(discountParsed)
+          ? discountParsed
+          : null,
     };
 
     try {
@@ -129,27 +160,26 @@ export default function AdminServicosPage() {
 
   // Deletar serviço
   const handleDelete = async (id: string) => {
-    if (confirm("Tem certeza que deseja deletar este serviço?")) {
-      try {
-        const res = await fetch("/api/service", {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Erro ao deletar");
-        fetchServices();
-      } catch (err: any) {
-        console.error("Erro ao deletar serviço:", err);
-        alert(`Erro ao deletar: ${err.message}`);
-      }
+    if (!confirm("Tem certeza que deseja deletar este serviço?")) return;
+
+    try {
+      const res = await fetch("/api/service", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao deletar");
+      fetchServices();
+    } catch (err: any) {
+      console.error("Erro ao deletar serviço:", err);
+      alert(`Erro ao deletar: ${err.message}`);
     }
   };
 
   // Lista filtrada + ordenada
   const filteredAndSortedServices = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
-
     let list = [...services];
 
     if (term) {
@@ -189,7 +219,7 @@ export default function AdminServicosPage() {
   }, [services, searchTerm, sortBy, sortDir]);
 
   if (loading) return <p className="text-[#D6C6AA]">Carregando serviços...</p>;
-  if (error) return <p className="text-red-500">Erro: {error}</p>;
+  if (error && !isModalOpen) return <p className="text-red-500">Erro: {error}</p>;
 
   return (
     <div className="p-6 space-y-6">
@@ -267,76 +297,94 @@ export default function AdminServicosPage() {
       ) : (
         <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden shadow-lg">
           {/* Cabeçalho */}
-          <div className="grid grid-cols-5 px-6 py-3 bg-gray-800 text-gray-400 text-sm font-semibold">
-            <span className="col-span-2">Serviço</span>
-            <span className="flex items-center gap-1">
-              <Clock className="w-4 h-4 text-gray-500" />
+          <div className="grid grid-cols-[2fr,1fr,1fr,1fr,1fr] px-6 py-3 bg-gray-800 text-gray-400 text-sm font-semibold">
+            <span>Serviço</span>
+            <span className="flex items-center gap-1 justify-center">
+              <Clock className="w-4 h-4 text-gray-400" />
               Duração
             </span>
-            <span>Preço</span>
-            <span>Imagem</span>
+            <span className="text-center">Preço</span>
+            <span className="text-center">Imagem</span>
             <span className="text-right">Ações</span>
           </div>
 
           {/* Linhas */}
           <div>
-            {filteredAndSortedServices.map((service) => (
-              <div
-                key={service.id}
-                className="grid grid-cols-5 items-center gap-4 px-6 py-4 border-t border-gray-800 hover:bg-gray-800/40 transition"
-              >
-                {/* Nome + descrição */}
-                <div className="col-span-2">
-                  <p className="text-white font-semibold">{service.name}</p>
-                  {service.description && (
-                    <p className="text-gray-500 text-sm truncate max-w-[320px]">
-                      {service.description}
+            {filteredAndSortedServices.map((service) => {
+              const hasDiscount =
+                service.discount_percent != null &&
+                service.discount_percent > 0;
+              const finalPrice = applyDiscount(
+                service.price,
+                service.discount_percent
+              );
+
+              return (
+                <div
+                  key={service.id}
+                  className="grid grid-cols-[2fr,1fr,1fr,1fr,1fr] items-center gap-4 px-6 py-4 border-t border-gray-800 hover:bg-gray-800/40 transition"
+                >
+                  {/* Nome + descrição */}
+                  <div>
+                    <p className="text-white font-semibold">{service.name}</p>
+                    {service.description && (
+                      <p className="text-gray-500 text-sm truncate max-w-[320px]">
+                        {service.description}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Duração */}
+                  <div className="text-gray-300">
+                    {service.duration_minutes || 60} min
+                  </div>
+
+                  {/* Preço + desconto */}
+                  <div>
+                    <p className="text-[#D6C6AA] font-bold">
+                      R$ {formatCurrency(finalPrice)}
                     </p>
-                  )}
-                </div>
+                    {hasDiscount && (
+                      <p className="text-xs text-gray-400">
+                        De R$ {formatCurrency(service.price)} ·{" "}
+                        {service.discount_percent}% de desconto
+                      </p>
+                    )}
+                  </div>
 
-                {/* Duração */}
-                <div className="text-gray-300">
-                  {service.duration_minutes || 60} min
-                </div>
+                  {/* Mini Imagem */}
+                  <div className="flex justify-center">
+                    <img
+                      src={
+                        service.image_url ||
+                        "https://via.placeholder.com/80x80/333/d6c6aa?text=IMG"
+                      }
+                      alt={service.name}
+                      className="w-16 h-16 rounded-lg object-cover border border-gray-700"
+                    />
+                  </div>
 
-                {/* Preço */}
-                <div className="text-[#D6C6AA] font-bold">
-                  R$ {service.price.toFixed(2).replace(".", ",")}
-                </div>
+                  {/* Ações */}
+                  <div className="flex justify-end gap-3">
+                    <button
+                      onClick={() => openEditModal(service)}
+                      className="px-3 py-1 rounded-md bg-blue-600 text-sm text-white hover:bg-blue-700 transition flex items-center gap-1"
+                    >
+                      <Edit className="w-4 h-4" />
+                      Editar
+                    </button>
 
-                {/* Mini Imagem */}
-                <div>
-                  <img
-                    src={
-                      service.image_url ||
-                      "https://via.placeholder.com/80x80/333/d6c6aa?text=IMG"
-                    }
-                    alt={service.name}
-                    className="w-16 h-16 rounded-lg object-cover border border-gray-700"
-                  />
+                    <button
+                      onClick={() => handleDelete(service.id)}
+                      className="px-3 py-1 rounded-md bg-red-600 text-sm text-white hover:bg-red-700 transition flex items-center gap-1"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Deletar
+                    </button>
+                  </div>
                 </div>
-
-                {/* Ações */}
-                <div className="flex justify-end gap-3">
-                  <button
-                    onClick={() => openEditModal(service)}
-                    className="px-3 py-1 rounded-md bg-blue-600 text-sm text-white hover:bg-blue-700 transition flex items-center gap-1"
-                  >
-                    <Edit className="w-4 h-4" />
-                    Editar
-                  </button>
-
-                  <button
-                    onClick={() => handleDelete(service.id)}
-                    className="px-3 py-1 rounded-md bg-red-600 text-sm text-white hover:bg-red-700 transition flex items-center gap-1"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    Deletar
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -400,9 +448,9 @@ export default function AdminServicosPage() {
                   ></textarea>
                 </div>
 
-                {/* Preço + Duração */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
+                {/* Preço + Duração + Desconto */}
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="col-span-1">
                     <label className="block text-sm text-gray-300 mb-1">
                       Preço (R$)
                     </label>
@@ -412,12 +460,29 @@ export default function AdminServicosPage() {
                       value={form.price}
                       onChange={handleFormChange}
                       step="0.01"
-                      className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:ring-2 focus:ring-[#D6C6AA] focus:outline-none"
+                      min="0"
+                      className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:ring-2 focus:ring-[#D6C6AA] focus:outline-none"
                       required
                     />
                   </div>
 
-                  <div>
+                  <div className="col-span-1">
+                    <label className="block text-sm text-gray-300 mb-1">
+                      Desconto (%)
+                    </label>
+                    <input
+                      type="number"
+                      name="discount_percent"
+                      value={form.discount_percent}
+                      onChange={handleFormChange}
+                      min="0"
+                      max="100"
+                      step="1"
+                      className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:ring-2 focus:ring-[#D6C6AA] focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="col-span-1">
                     <label className="block text-sm text-gray-300 mb-1">
                       Duração (min)
                     </label>
@@ -428,7 +493,7 @@ export default function AdminServicosPage() {
                       onChange={handleFormChange}
                       min="10"
                       step="5"
-                      className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:ring-2 focus:ring-[#D6C6AA] focus:outline-none"
+                      className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:ring-2 focus:ring-[#D6C6AA] focus:outline-none"
                       required
                     />
                   </div>

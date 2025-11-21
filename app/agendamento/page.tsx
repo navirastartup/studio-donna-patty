@@ -9,15 +9,30 @@ const BG =
   "https://images.unsplash.com/photo-1673945049132-17ff2d9f60c8?q=80&w=900&auto=format&fit=crop";
 
 /* ============================================================
+ * Helpers de preço
+ * ============================================================ */
+const formatCurrency = (value: number) =>
+  value.toFixed(2).replace(".", ",");
+
+const applyDiscount = (price: number, discount?: number | null) => {
+  if (!discount || discount <= 0) return price;
+  const final = price * (1 - discount / 100);
+  return Math.round(final * 100) / 100;
+};
+
+const CLIENT_DATA_KEY = "studio-donna-patty-client";
+
+/* ============================================================
  * Tipos
  * ============================================================ */
 interface Service {
   id: string;
   name: string;
   description?: string | null;
-  price: string;
+  price: number;                      // agora number
   image_url?: string | null;
   duration_minutes?: number | null;
+  discount_percent?: number | null;   // novo campo
 }
 
 interface Professional {
@@ -55,7 +70,8 @@ export default function AgendamentoPage() {
 
   // Seleções
   const [selectedService, setSelectedService] = useState<Service | null>(null);
-  const [selectedProfessional, setSelectedProfessional] = useState<Professional | null>(null);
+  const [selectedProfessional, setSelectedProfessional] =
+    useState<Professional | null>(null);
   const [selectedDate, setSelectedDate] = useState<number | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
 
@@ -64,14 +80,19 @@ export default function AgendamentoPage() {
   );
 
   // Inputs cliente
-  const [formData, setFormData] = useState({ nome: "", telefone: "", email: "" });
+  const [formData, setFormData] = useState({
+    nome: "",
+    telefone: "",
+    email: "",
+  });
 
   const handleInputChange = (field: keyof typeof formData, value: string) =>
     setFormData((prev) => ({ ...prev, [field]: value }));
 
   function normalizePhone(raw: string): string {
     let digits = raw.replace(/\D/g, "");
-    if (digits.length === 11 && digits[2] === "9") digits = digits.slice(0, 2) + digits.slice(3);
+    if (digits.length === 11 && digits[2] === "9")
+      digits = digits.slice(0, 2) + digits.slice(3);
     return digits;
   }
 
@@ -79,7 +100,10 @@ export default function AgendamentoPage() {
     const digits = raw.replace(/\D/g, "");
     if (digits.length <= 2) return digits;
     if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
-    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6, 10)}`;
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(
+      6,
+      10
+    )}`;
   }
 
   function isValidBrazilianPhone(raw: string): boolean {
@@ -95,11 +119,45 @@ export default function AgendamentoPage() {
   const [bookingSuccess, setBookingSuccess] = useState<boolean>(false);
 
   // Pagamento
-  const [paymentPolicy, setPaymentPolicy] = useState<PaymentPolicy>("full");
-  const [paymentMode, setPaymentMode] = useState<PaymentMode>("percent");
+  const [paymentPolicy, setPaymentPolicy] =
+    useState<PaymentPolicy>("full");
+  const [paymentMode, setPaymentMode] =
+    useState<PaymentMode>("percent");
   const [paymentValue, setPaymentValue] = useState<number>(30);
 
   const [step, setStep] = useState<number>(1);
+
+  /* ============================================================
+   * Carregar dados do cliente do navegador (localStorage)
+   * ============================================================ */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const saved = window.localStorage.getItem(CLIENT_DATA_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setFormData((prev) => ({
+          ...prev,
+          ...parsed,
+        }));
+      }
+    } catch (e) {
+      console.error("Erro ao carregar dados do cliente:", e);
+    }
+  }, []);
+
+  // Sempre que o cliente digitar, salva no navegador
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        CLIENT_DATA_KEY,
+        JSON.stringify(formData)
+      );
+    } catch (e) {
+      console.error("Erro ao salvar dados do cliente:", e);
+    }
+  }, [formData]);
 
   /* ============================================================
    * Buscar dados iniciais
@@ -110,7 +168,9 @@ export default function AgendamentoPage() {
 
       const { data: servicesData } = await supabase
         .from("services")
-        .select("id, name, description, price, image_url, duration_minutes");
+        .select(
+          "id, name, description, price, image_url, duration_minutes, discount_percent"
+        );
       setServices((servicesData as Service[]) || []);
 
       const { data: profData } = await supabase
@@ -118,13 +178,17 @@ export default function AgendamentoPage() {
         .select("id, name, specialty, image_url, bio");
       setProfessionals((profData as Professional[]) || []);
 
-      const { data: schedulesData } = await supabase.from("schedules").select("*");
+      const { data: schedulesData } = await supabase
+        .from("schedules")
+        .select("*");
       setAvailableSchedules((schedulesData as Schedule[]) || []);
 
-      const { data: settingsData } = await supabase.from("settings").select("key, value");
+      const { data: settingsData } = await supabase
+        .from("settings")
+        .select("key, value");
       if (settingsData) {
         const getVal = (k: string, def?: any) =>
-          settingsData.find((s: any) => s.key === k)?.value ?? def;
+          (settingsData as any[]).find((s) => s.key === k)?.value ?? def;
 
         setPaymentPolicy(getVal("payment_policy", "full"));
         setPaymentMode(getVal("payment_mode", "percent"));
@@ -137,26 +201,37 @@ export default function AgendamentoPage() {
   }, []);
 
   /* ============================================================
-   * Calcular valor devido
+   * Calcular valor devido (considerando desconto)
    * ============================================================ */
   const amountDue = useMemo(() => {
     if (!selectedService) return 0;
-    const base = parseFloat(selectedService.price);
+
+    const base = Number(selectedService.price ?? 0);
+    const priceWithDiscount = applyDiscount(
+      base,
+      selectedService.discount_percent
+    );
 
     if (paymentPolicy === "none") return 0;
-    if (paymentPolicy === "full") return base;
+    if (paymentPolicy === "full") return priceWithDiscount;
 
     return paymentMode === "percent"
-      ? (base * paymentValue) / 100
+      ? (priceWithDiscount * paymentValue) / 100
       : paymentValue;
-  }, [selectedService, paymentPolicy, paymentMode, paymentValue]);
+  }, [
+    selectedService,
+    paymentPolicy,
+    paymentMode,
+    paymentValue,
+  ]);
 
   /* ============================================================
    * Horários disponíveis
    * ============================================================ */
   useEffect(() => {
     async function fetchAvailableSlots() {
-      if (!selectedDate || !selectedProfessional) return setTimeSlots([]);
+      if (!selectedDate || !selectedProfessional)
+        return setTimeSlots([]);
 
       try {
         const fullDate = new Date(
@@ -172,7 +247,8 @@ export default function AgendamentoPage() {
         const schedule = availableSchedules.find(
           (s) =>
             s.day_of_week.toLowerCase() === dayOfWeek &&
-            (!s.professional_id || s.professional_id === selectedProfessional.id)
+            (!s.professional_id ||
+              s.professional_id === selectedProfessional.id)
         );
 
         if (!schedule) return setTimeSlots([]);
@@ -202,13 +278,16 @@ export default function AgendamentoPage() {
           .lte("end_time", endOfDay.toISOString());
 
         const toLocal = (d: string) =>
-          new Date(new Date(d).getTime() - new Date().getTimezoneOffset() * 60000)
+          new Date(
+            new Date(d).getTime() -
+              new Date().getTimezoneOffset() * 60000
+          )
             .toISOString()
             .slice(11, 16);
 
         const occupied = (existingAppointments ?? []).map((a) => ({
-          start: toLocal(a.start_time),
-          end: toLocal(a.end_time),
+          start: toLocal((a as any).start_time),
+          end: toLocal((a as any).end_time),
         }));
 
         const duration = Number(selectedService?.duration_minutes ?? 60);
@@ -224,7 +303,9 @@ export default function AgendamentoPage() {
             const [eh, em] = b.end.split(":").map(Number);
             const busyStart = bh * 60 + bm;
             const busyEnd = eh * 60 + em;
-            return !(slotEnd <= busyStart || slotStart >= busyEnd);
+            return !(
+              slotEnd <= busyStart || slotStart >= busyEnd
+            );
           });
         };
 
@@ -234,7 +315,9 @@ export default function AgendamentoPage() {
           for (let m = 0; m < 60; m += step) {
             if (h >= breakStartHour && h < breakEndHour) continue;
 
-            const time = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+            const time = `${String(h).padStart(2, "0")}:${String(
+              m
+            ).padStart(2, "0")}`;
             if (!isOccupied(time)) slots.push(time);
           }
         }
@@ -246,12 +329,22 @@ export default function AgendamentoPage() {
     }
 
     fetchAvailableSlots();
-  }, [selectedDate, selectedProfessional, availableSchedules, currentMonth, selectedService]);
+  }, [
+    selectedDate,
+    selectedProfessional,
+    availableSchedules,
+    currentMonth,
+    selectedService,
+  ]);
 
   /* ============================================================
    * Criar cliente caso não exista
    * ============================================================ */
-  async function ensureClient(name: string, email: string, phone: string): Promise<string> {
+  async function ensureClient(
+    name: string,
+    email: string,
+    phone: string
+  ): Promise<string> {
     const { data: existing, error: existingError } = await supabase
       .from("clients")
       .select("id")
@@ -274,7 +367,7 @@ export default function AgendamentoPage() {
   }
 
   /* ============================================================
-   * Confirmar Agendamento (CORRIGIDO)
+   * Confirmar Agendamento
    * ============================================================ */
   async function handleSubmitBooking() {
     setError(null);
@@ -309,8 +402,13 @@ export default function AgendamentoPage() {
 
     const startTime = `${yyyy}-${mm2}-${dd2}T${hh}:${mm}:00`;
 
-    // calcular final sem UTC
-    const endD = new Date(yyyy, currentMonth.getMonth(), selectedDate, Number(hh), Number(mm));
+    const endD = new Date(
+      yyyy,
+      currentMonth.getMonth(),
+      selectedDate,
+      Number(hh),
+      Number(mm)
+    );
     endD.setMinutes(endD.getMinutes() + duration);
 
     const endH = String(endD.getHours()).padStart(2, "0");
@@ -363,7 +461,7 @@ export default function AgendamentoPage() {
       },
       startTime,
       endTime,
-      price: amountDue,
+      price: amountDue, // já baseado no preço com desconto
       policy: paymentPolicy,
     };
 
@@ -384,7 +482,6 @@ export default function AgendamentoPage() {
   /* ============================================================
    * Render
    * ============================================================ */
-
   const firstDayIndex = new Date(
     currentMonth.getFullYear(),
     currentMonth.getMonth(),
@@ -396,7 +493,6 @@ export default function AgendamentoPage() {
     currentMonth.getMonth() + 1,
     0
   ).getDate();
-
 
   if (loading && !bookingSuccess)
     return (
@@ -414,26 +510,22 @@ export default function AgendamentoPage() {
       }}
     >
       <div className="w-full max-w-5xl bg-[#111111]/60 backdrop-blur-xl border border-[#ffffff15] rounded-[28px] shadow-[0_0_80px_rgba(0,0,0,0.45)] p-10">
-
-        {/* ======================================================
-         * TÍTULO
-         * ====================================================== */}
+        {/* Título */}
         <h1 className="text-center text-[3rem] font-serif tracking-tight text-[#E8DCC3] mb-12">
           Agendamento
         </h1>
 
-        {/* ======================================================
-         * PASSOS
-         * ====================================================== */}
+        {/* Passos */}
         <div className="flex justify-center items-center gap-3 mb-14">
           {[1, 2, 3, 4, 5].map((s) => (
             <div
               key={s}
               className={`
                 w-10 h-10 flex items-center justify-center rounded-full border transition-all
-                ${step === s
-                  ? "border-[#E8DCC3] text-[#E8DCC3]"
-                  : "border-[#ffffff20] text-[#ffffff40]"
+                ${
+                  step === s
+                    ? "border-[#E8DCC3] text-[#E8DCC3]"
+                    : "border-[#ffffff20] text-[#ffffff40]"
                 }
               `}
             >
@@ -442,9 +534,7 @@ export default function AgendamentoPage() {
           ))}
         </div>
 
-        {/* ======================================================
-         * STEP 1 — Serviço
-         * ====================================================== */}
+        {/* STEP 1 — Serviço */}
         {step === 1 && (
           <div>
             <h2 className="text-2xl font-semibold text-[#D6C6AA] mb-8 text-center">
@@ -452,43 +542,70 @@ export default function AgendamentoPage() {
             </h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {services.map((service) => (
-                <button
-                  key={service.id}
-                  onClick={() => {
-                    setSelectedService(service);
-                    setStep(2);
-                  }}
-                  className={`
-                    group relative p-5 rounded-xl border backdrop-blur
-                    transition-all duration-300 overflow-hidden
-                    ${selectedService?.id === service.id
-                      ? "border-[#E8DCC3]/60 bg-[#E8DCC3]/5 shadow-[0_0_30px_rgba(232,220,195,0.15)]"
-                      : "border-[#ffffff10] hover:border-[#E8DCC3]/40 bg-[#ffffff05]"
-                    }
-                  `}
-                >
-                  <img
-                    src={service.image_url || "https://via.placeholder.com/600x400/111/aaa?text=Serviço"}
-                    className="w-full h-40 object-cover rounded-lg opacity-90 group-hover:opacity-100 transition"
-                  />
+              {services.map((service) => {
+                const basePrice = Number(service.price ?? 0);
+                const hasDiscount =
+                  service.discount_percent != null &&
+                  service.discount_percent > 0;
+                const finalPrice = applyDiscount(
+                  basePrice,
+                  service.discount_percent
+                );
 
-                  <div className="mt-4 text-lg text-[#E8DCC3] font-serif">
-                    {service.name}
-                  </div>
+                return (
+                  <button
+                    key={service.id}
+                    onClick={() => {
+                      setSelectedService(service);
+                      setStep(2);
+                    }}
+                    className={`
+                      group relative p-5 rounded-xl border backdrop-blur
+                      transition-all duration-300 overflow-hidden
+                      ${
+                        selectedService?.id === service.id
+                          ? "border-[#E8DCC3]/60 bg-[#E8DCC3]/5 shadow-[0_0_30px_rgba(232,220,195,0.15)]"
+                          : "border-[#ffffff10] hover:border-[#E8DCC3]/40 bg-[#ffffff05]"
+                      }
+                    `}
+                  >
+                    <img
+                      src={
+                        service.image_url ||
+                        "https://via.placeholder.com/600x400/111/aaa?text=Serviço"
+                      }
+                      className="w-full h-40 object-cover rounded-lg opacity-90 group-hover:opacity-100 transition"
+                    />
 
-                  <div className="text-[#ffffffcc] font-medium mt-1">
-                    R$ {Number(service.price).toFixed(2).replace(".", ",")}
-                  </div>
-                </button>
-              ))}
+                    <div className="mt-4 text-lg text-[#E8DCC3] font-serif">
+                      {service.name}
+                    </div>
+
+                    {!hasDiscount && (
+                      <div className="text-[#ffffffcc] font-medium mt-1">
+                        R$ {formatCurrency(basePrice)}
+                      </div>
+                    )}
+
+                    {hasDiscount && (
+                      <div className="mt-1 text-sm">
+                        <div className="text-[#E8DCC3] font-semibold">
+                          R$ {formatCurrency(finalPrice)}
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          De R$ {formatCurrency(basePrice)} ·{" "}
+                          {service.discount_percent}% de desconto
+                        </div>
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
 
-        {/* ======================================================
-         * STEP 2 — Profissional
-         * ====================================================== */}
+        {/* STEP 2 — Profissional */}
         {step === 2 && (
           <div>
             <h2 className="text-2xl font-semibold text-[#E8DCC3] mb-8 text-center">
@@ -506,8 +623,10 @@ export default function AgendamentoPage() {
                   className={`
                     p-6 rounded-2xl bg-[#111111] border border-[#2a2a2a]
                     transition-all duration-200 hover:scale-[1.03] hover:border-[#E8DCC3]/60 shadow-lg
-                    ${selectedProfessional?.id === prof.id &&
-                      "border-[#E8DCC3] shadow-[0_0_20px_rgba(232,220,195,0.25)]"}
+                    ${
+                      selectedProfessional?.id === prof.id &&
+                      "border-[#E8DCC3] shadow-[0_0_20px_rgba(232,220,195,0.25)]"
+                    }
                   `}
                 >
                   <div className="w-24 h-24 mx-auto rounded-full overflow-hidden mb-4 border border-[#3d3d3d]">
@@ -517,8 +636,12 @@ export default function AgendamentoPage() {
                     />
                   </div>
 
-                  <h3 className="text-white text-lg font-medium text-center">{prof.name}</h3>
-                  <p className="text-[#E8DCC3]/70 text-sm text-center">{prof.specialty}</p>
+                  <h3 className="text-white text-lg font-medium text-center">
+                    {prof.name}
+                  </h3>
+                  <p className="text-[#E8DCC3]/70 text-sm text-center">
+                    {prof.specialty}
+                  </p>
                 </button>
               ))}
             </div>
@@ -532,23 +655,27 @@ export default function AgendamentoPage() {
           </div>
         )}
 
-        {/* ======================================================
-         * STEP 3 — Calendário + Horários
-         * ====================================================== */}
+        {/* STEP 3 — Calendário + Horários */}
         {step === 3 && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-
-            {/* CALENDÁRIO */}
+            {/* Calendário */}
             <div className="bg-[#111] border border-[#2a2a2a] rounded-2xl p-6 shadow-lg">
-
               <h2 className="text-xl font-semibold text-[#E8DCC3] mb-6">
                 Selecione a Data
               </h2>
 
               <div className="flex items-center justify-between text-[#E8DCC3] mb-4">
-                <button onClick={() =>
-                  setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))
-                }>
+                <button
+                  onClick={() =>
+                    setCurrentMonth(
+                      new Date(
+                        currentMonth.getFullYear(),
+                        currentMonth.getMonth() - 1,
+                        1
+                      )
+                    )
+                  }
+                >
                   <ChevronLeft />
                 </button>
 
@@ -559,17 +686,27 @@ export default function AgendamentoPage() {
                   })}
                 </span>
 
-                <button onClick={() =>
-                  setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))
-                }>
+                <button
+                  onClick={() =>
+                    setCurrentMonth(
+                      new Date(
+                        currentMonth.getFullYear(),
+                        currentMonth.getMonth() + 1,
+                        1
+                      )
+                    )
+                  }
+                >
                   <ChevronRight />
                 </button>
               </div>
 
               <div className="grid grid-cols-7 gap-1 text-center text-xs text-gray-400 mb-1">
-                {["dom", "seg", "ter", "qua", "qui", "sex", "sab"].map((d) => (
-                  <span key={d}>{d}</span>
-                ))}
+                {["dom", "seg", "ter", "qua", "qui", "sex", "sab"].map(
+                  (d) => (
+                    <span key={d}>{d}</span>
+                  )
+                )}
               </div>
 
               <div className="grid grid-cols-7 gap-2 text-center">
@@ -577,7 +714,10 @@ export default function AgendamentoPage() {
                   <span key={i} />
                 ))}
 
-                {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
+                {Array.from(
+                  { length: daysInMonth },
+                  (_, i) => i + 1
+                ).map((day) => {
                   const selected = selectedDate === day;
 
                   return (
@@ -586,9 +726,10 @@ export default function AgendamentoPage() {
                       onClick={() => setSelectedDate(day)}
                       className={`
                         p-2 rounded-lg text-sm transition
-                        ${selected
-                          ? "bg-[#E8DCC3] text-black shadow-md"
-                          : "text-gray-300 hover:bg-[#272727]"
+                        ${
+                          selected
+                            ? "bg-[#E8DCC3] text-black shadow-md"
+                            : "text-gray-300 hover:bg-[#272727]"
                         }
                       `}
                     >
@@ -610,9 +751,10 @@ export default function AgendamentoPage() {
                       onClick={() => setSelectedTime(t)}
                       className={`
                         px-4 py-2 rounded-full text-sm transition
-                        ${selectedTime === t
-                          ? "bg-[#E8DCC3] text-black shadow-lg"
-                          : "bg-[#1d1d1d] text-gray-300 hover:bg-[#2a2a2a]"
+                        ${
+                          selectedTime === t
+                            ? "bg-[#E8DCC3] text-black shadow-lg"
+                            : "bg-[#1d1d1d] text-gray-300 hover:bg-[#2a2a2a]"
                         }
                       `}
                     >
@@ -627,25 +769,28 @@ export default function AgendamentoPage() {
               </div>
             </div>
 
-            {/* DETALHES DO AGENDAMENTO */}
+            {/* Detalhes do Agendamento */}
             <div className="bg-[#111] border border-[#2a2a2a] rounded-2xl p-6 shadow-lg">
               <h4 className="text-xl font-semibold text-[#E8DCC3] mb-4">
                 Detalhes do Agendamento
               </h4>
 
               <div className="space-y-2 text-sm text-gray-300">
-
                 {selectedService && (
                   <p>
                     <span className="text-gray-400">Serviço:</span>{" "}
-                    <span className="text-white">{selectedService.name}</span>
+                    <span className="text-white">
+                      {selectedService.name}
+                    </span>
                   </p>
                 )}
 
                 {selectedProfessional && (
                   <p>
                     <span className="text-gray-400">Profissional:</span>{" "}
-                    <span className="text-white">{selectedProfessional.name}</span>
+                    <span className="text-white">
+                      {selectedProfessional.name}
+                    </span>
                   </p>
                 )}
 
@@ -654,19 +799,54 @@ export default function AgendamentoPage() {
                     <span className="text-gray-400">Data e Hora:</span>{" "}
                     <span className="text-white">
                       {selectedDate} de{" "}
-                      {currentMonth.toLocaleDateString("pt-BR", { month: "long" })}{" "}
+                      {currentMonth.toLocaleDateString("pt-BR", {
+                        month: "long",
+                      })}{" "}
                       às {selectedTime}
                     </span>
                   </p>
                 ) : (
-                  <p className="text-gray-500">Selecione data e horário</p>
+                  <p className="text-gray-500">
+                    Selecione data e horário
+                  </p>
+                )}
+
+                {selectedService && (
+                  <>
+                    <p>
+                      <span className="text-gray-400">
+                        Valor do serviço:
+                      </span>{" "}
+                      <span className="text-white">
+                        R${" "}
+                        {formatCurrency(
+                          Number(selectedService.price ?? 0)
+                        )}
+                      </span>
+                    </p>
+                    {selectedService.discount_percent &&
+                      selectedService.discount_percent > 0 && (
+                        <p className="text-xs text-gray-400">
+                          Com desconto: R${" "}
+                          {formatCurrency(
+                            applyDiscount(
+                              Number(selectedService.price ?? 0),
+                              selectedService.discount_percent
+                            )
+                          )}{" "}
+                          ({selectedService.discount_percent}% off)
+                        </p>
+                      )}
+                  </>
                 )}
 
                 {selectedService && paymentPolicy !== "none" && (
-                  <p className="text-lg">
-                    <span className="text-gray-400">A pagar agora:</span>{" "}
+                  <p className="text-lg mt-2">
+                    <span className="text-gray-400">
+                      A pagar agora:
+                    </span>{" "}
                     <span className="text-[#D6C6AA] font-semibold">
-                      R$ {amountDue.toFixed(2).replace(".", ",")}
+                      R$ {formatCurrency(amountDue)}
                     </span>
                   </p>
                 )}
@@ -685,16 +865,15 @@ export default function AgendamentoPage() {
                   disabled={!selectedDate || !selectedTime}
                   className="bg-[#E8DCC3] text-black font-semibold px-6 py-3 rounded-xl hover:bg-[#f3ead6] transition disabled:opacity-40"
                 >
-                  Continuar <ChevronRight className="w-5 h-5 inline-block ml-2" />
+                  Continuar{" "}
+                  <ChevronRight className="w-5 h-5 inline-block ml-2" />
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* ======================================================
-         * STEP 4 — Dados do Cliente
-         * ====================================================== */}
+        {/* STEP 4 — Dados do Cliente */}
         {step === 4 && (
           <div>
             <h2 className="text-2xl font-semibold text-[#D6C6AA] mb-6 text-center">
@@ -702,7 +881,6 @@ export default function AgendamentoPage() {
             </h2>
 
             <div className="space-y-4 max-w-lg mx-auto">
-
               {/* Nome */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -711,7 +889,9 @@ export default function AgendamentoPage() {
                 <input
                   type="text"
                   value={formData.nome}
-                  onChange={(e) => handleInputChange("nome", e.target.value)}
+                  onChange={(e) =>
+                    handleInputChange("nome", e.target.value)
+                  }
                   className="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white"
                   placeholder="Digite seu nome completo"
                 />
@@ -725,15 +905,22 @@ export default function AgendamentoPage() {
                 <input
                   type="tel"
                   value={formData.telefone}
-                  onChange={(e) => handleInputChange("telefone", formatPhone(e.target.value))}
+                  onChange={(e) =>
+                    handleInputChange(
+                      "telefone",
+                      formatPhone(e.target.value)
+                    )
+                  }
                   className="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white"
                   placeholder="(73) 9840-1234"
                 />
-                {formData.telefone && !isValidBrazilianPhone(formData.telefone) && (
-                  <p className="text-red-400 text-sm mt-1">
-                    Digite DD + número sem o 9 extra. Ex: (73) 9840-1234
-                  </p>
-                )}
+                {formData.telefone &&
+                  !isValidBrazilianPhone(formData.telefone) && (
+                    <p className="text-red-400 text-sm mt-1">
+                      Digite DD + número sem o 9 extra. Ex: (73)
+                      9840-1234
+                    </p>
+                  )}
               </div>
 
               {/* Email */}
@@ -744,12 +931,13 @@ export default function AgendamentoPage() {
                 <input
                   type="email"
                   value={formData.email}
-                  onChange={(e) => handleInputChange("email", e.target.value)}
+                  onChange={(e) =>
+                    handleInputChange("email", e.target.value)
+                  }
                   className="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white"
                   placeholder="seu@email.com"
                 />
               </div>
-
             </div>
 
             <div className="flex justify-between mt-8">
@@ -762,18 +950,21 @@ export default function AgendamentoPage() {
 
               <button
                 onClick={() => setStep(5)}
-                disabled={!formData.nome || !formData.email || !isValidBrazilianPhone(formData.telefone)}
+                disabled={
+                  !formData.nome ||
+                  !formData.email ||
+                  !isValidBrazilianPhone(formData.telefone)
+                }
                 className="bg-[#D6C6AA] text-black font-semibold px-6 py-2 rounded-lg hover:bg-[#e5d8c2] transition-colors disabled:opacity-50"
               >
-                Revisar <ChevronRight className="w-5 h-5 inline-block ml-2" />
+                Revisar{" "}
+                <ChevronRight className="w-5 h-5 inline-block ml-2" />
               </button>
             </div>
           </div>
         )}
 
-        {/* ======================================================
-         * STEP 5 — Revisão
-         * ====================================================== */}
+        {/* STEP 5 — Revisão */}
         {step === 5 && (
           <div>
             <h2 className="text-center text-[1.75rem] font-semibold text-[#E8DCC3] mb-10">
@@ -781,24 +972,79 @@ export default function AgendamentoPage() {
             </h2>
 
             <div className="bg-[#111] border border-[#2a2a2a] rounded-2xl p-8 shadow-xl max-w-xl w-full mx-auto text-gray-300 space-y-3">
+              <h3 className="text-[#E8DCC3] text-xl font-medium mb-4">
+                Detalhes:
+              </h3>
 
-              <h3 className="text-[#E8DCC3] text-xl font-medium mb-4">Detalhes:</h3>
-
-              <p><span className="text-[#E8DCC3]/80">Serviço:</span> {selectedService?.name}</p>
-              <p><span className="text-[#E8DCC3]/80">Profissional:</span> {selectedProfessional?.name}</p>
-              <p><span className="text-[#E8DCC3]/80">Data:</span> {selectedDate} de {currentMonth.toLocaleDateString("pt-BR", { month: "long" })}</p>
-              <p><span className="text-[#E8DCC3]/80">Horário:</span> {selectedTime}</p>
-              <p><span className="text-[#E8DCC3]/80">Nome:</span> {formData.nome}</p>
-              <p><span className="text-[#E8DCC3]/80">Telefone:</span> {formData.telefone}</p>
-              <p><span className="text-[#E8DCC3]/80">E-mail:</span> {formData.email}</p>
+              <p>
+                <span className="text-[#E8DCC3]/80">Serviço:</span>{" "}
+                {selectedService?.name}
+              </p>
+              <p>
+                <span className="text-[#E8DCC3]/80">
+                  Profissional:
+                </span>{" "}
+                {selectedProfessional?.name}
+              </p>
+              <p>
+                <span className="text-[#E8DCC3]/80">Data:</span>{" "}
+                {selectedDate} de{" "}
+                {currentMonth.toLocaleDateString("pt-BR", {
+                  month: "long",
+                })}
+              </p>
+              <p>
+                <span className="text-[#E8DCC3]/80">Horário:</span>{" "}
+                {selectedTime}
+              </p>
+              <p>
+                <span className="text-[#E8DCC3]/80">Nome:</span>{" "}
+                {formData.nome}
+              </p>
+              <p>
+                <span className="text-[#E8DCC3]/80">Telefone:</span>{" "}
+                {formData.telefone}
+              </p>
+              <p>
+                <span className="text-[#E8DCC3]/80">E-mail:</span>{" "}
+                {formData.email}
+              </p>
 
               {selectedService?.duration_minutes && (
                 <p>
-                  <span className="text-[#E8DCC3]/80">Duração:</span>
-                  {" "}
+                  <span className="text-[#E8DCC3]/80">
+                    Duração:
+                  </span>{" "}
                   {selectedService.duration_minutes} min
                 </p>
               )}
+
+              {selectedService && (
+                <p>
+                  <span className="text-[#E8DCC3]/80">
+                    Valor do serviço:
+                  </span>{" "}
+                  R${" "}
+                  {formatCurrency(
+                    Number(selectedService.price ?? 0)
+                  )}
+                </p>
+              )}
+
+              {selectedService?.discount_percent &&
+                selectedService.discount_percent > 0 && (
+                  <p className="text-sm text-gray-400">
+                    Com desconto: R${" "}
+                    {formatCurrency(
+                      applyDiscount(
+                        Number(selectedService.price ?? 0),
+                        selectedService.discount_percent
+                      )
+                    )}{" "}
+                    ({selectedService.discount_percent}% de
+                    desconto)
+                  </p>
+                )}
 
               {paymentPolicy === "none" ? (
                 <p className="text-[#E8DCC3] text-lg font-semibold mt-4">
@@ -806,13 +1052,12 @@ export default function AgendamentoPage() {
                 </p>
               ) : (
                 <p className="text-[#E8DCC3] text-lg font-semibold mt-4">
-                  A pagar agora: R$ {amountDue.toFixed(2).replace(".", ",")}
+                  A pagar agora: R$ {formatCurrency(amountDue)}
                 </p>
               )}
             </div>
 
             <div className="max-w-xl w-full mx-auto flex justify-between mt-10">
-
               <button
                 onClick={() => setStep(4)}
                 className="text-gray-400 hover:text-[#E8DCC3] transition flex items-center gap-2"
@@ -820,13 +1065,13 @@ export default function AgendamentoPage() {
                 <ChevronLeft className="w-5 h-5" /> Voltar
               </button>
 
-              <button
-                onClick={handleSubmitBooking}
-                disabled={loading}
-                className="bg-[#E8DCC3] text-black font-semibold px-8 py-3 rounded-xl hover:bg-[#f3ead6] transition disabled:opacity-40"
-              >
-                {loading ? "Processando..." : "Confirmar Agendamento"}
-              </button>
+            <button
+              onClick={handleSubmitBooking}
+              disabled={loading}
+              className="bg-[#E8DCC3] text-black font-semibold px-8 py-3 rounded-xl hover:bg-[#f3ead6] transition disabled:opacity-40"
+            >
+              {loading ? "Processando..." : "Confirmar Agendamento"}
+            </button>
             </div>
 
             {error && (
@@ -842,7 +1087,6 @@ export default function AgendamentoPage() {
             )}
           </div>
         )}
-
       </div>
     </main>
   );
