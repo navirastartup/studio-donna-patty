@@ -26,7 +26,7 @@ export async function POST(req: Request) {
     const { data: schedule } = await supabase
       .from("schedules")
       .select("*")
-      .eq("day_of_week", weekDay)
+      .eq("day_of_week", String(weekDay))
       .single();
 
     if (!schedule) return NextResponse.json({ available: [] });
