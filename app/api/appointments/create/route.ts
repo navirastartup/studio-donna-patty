@@ -9,12 +9,12 @@ export async function POST(req: Request) {
   try {
     const { appointment, payment } = await req.json();
 
-    // 🧩 Validação básica
     if (
       !appointment?.service_id ||
       !appointment?.professional_id ||
       !appointment?.client_id ||
-      !appointment?.start_time
+      !appointment?.date ||
+      !appointment?.time
     ) {
       return NextResponse.json(
         { error: "Dados do agendamento incompletos." },
@@ -22,7 +22,38 @@ export async function POST(req: Request) {
       );
     }
 
-    // 💾 Cria o agendamento
+    const { date, time } = appointment;
+
+    // ==========================================
+    // 1) PEGAR DURAÇÃO DO SERVIÇO
+    // ==========================================
+    const { data: service } = await admin
+      .from("services")
+      .select("duration_minutes")
+      .eq("id", appointment.service_id)
+      .single();
+
+    if (!service) {
+      return NextResponse.json(
+        { error: "Serviço não encontrado." },
+        { status: 400 }
+      );
+    }
+
+    const duration = service.duration_minutes;
+
+    // ==========================================
+    // 2) CALCULAR start_time E end_time
+    // ==========================================
+    const start = new Date(`${date}T${time}:00`);
+    const end = new Date(start.getTime() + duration * 60000);
+
+    const startISO = start.toISOString();
+    const endISO = end.toISOString();
+
+    // ==========================================
+    // 3) CRIAR O AGENDAMENTO
+    // ==========================================
     const { data: appt, error: aErr } = await admin
       .from("appointments")
       .insert([
@@ -31,9 +62,9 @@ export async function POST(req: Request) {
           professional_id: appointment.professional_id,
           client_id: appointment.client_id,
           client_email: appointment.client_email ?? null,
-          start_time: appointment.start_time,
-          end_time: appointment.end_time,
-          status: "confirmado",
+          start_time: startISO,
+          end_time: endISO,
+          status: "confirmed",
           payment_status:
             appointment.payment_status === "pago" ? "pago" : "pendente",
           notes: appointment.notes ?? null,
@@ -45,9 +76,10 @@ export async function POST(req: Request) {
 
     if (aErr) throw aErr;
 
-    // 💳 Criar pagamento APENAS se o frontend mandou explicitamente "payment"
+    // ==========================================
+    // 4) SE TIVER PAGAMENTO, CRIA TUDO JUNTO
+    // ==========================================
     if (payment && payment.amount && payment.method) {
-      // ⚠️ Verifica se já existe pagamento para este agendamento
       const { data: existing } = await admin
         .from("payments")
         .select("id")
@@ -55,7 +87,6 @@ export async function POST(req: Request) {
         .maybeSingle();
 
       if (!existing) {
-        // 1️⃣ Cria fatura vinculada ao cliente
         const { data: invoice, error: invErr } = await admin
           .from("invoices")
           .insert([
@@ -70,7 +101,6 @@ export async function POST(req: Request) {
 
         if (invErr) throw invErr;
 
-        // 2️⃣ Cria pagamento vinculado
         const { error: pErr } = await admin.from("payments").insert([
           {
             appointment_id: appt.id,
