@@ -499,6 +499,11 @@ useEffect(() => {
                       }
                       className="w-full h-40 object-cover rounded-lg opacity-90 group-hover:opacity-100 transition"
                     />
+{service.description && (
+  <p className="text-xs text-gray-400 mt-1 leading-relaxed">
+    {service.description}
+  </p>
+)}
 
                     <div className="mt-4 text-lg text-[#E8DCC3] font-serif">
                       {service.name}

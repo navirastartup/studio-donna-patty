@@ -12,7 +12,10 @@ export async function POST(req: Request) {
     const { date, professional_id, service_id } = await req.json();
 
     if (!date || !service_id) {
-      return NextResponse.json({ error: "Data e serviço obrigatórios." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Data e serviço obrigatórios." },
+        { status: 400 }
+      );
     }
 
     const weekdays = [
@@ -36,9 +39,9 @@ export async function POST(req: Request) {
       .eq("day_of_week", weekdayName)
       .single();
 
-// DIA FECHADO
-if (!schedule || schedule.start_time === "00:00:00" || schedule.end_time === "00:00:00") {
-  return NextResponse.json({ available: [], closed: true });
+    // DIA FECHADO
+    if (!schedule || schedule.start_time === "00:00:00" || schedule.end_time === "00:00:00") {
+      return NextResponse.json({ available: [], closed: true });
     }
 
     const open = schedule.start_time;
@@ -57,9 +60,11 @@ if (!schedule || schedule.start_time === "00:00:00" || schedule.end_time === "00
     if (!duration) return NextResponse.json({ available: [] });
 
     // 3. Buscar agendamentos do dia
+    // ⬇️⬇️⬇️ **AGORA IGNORANDO MANUAIS** ⬇️⬇️⬇️
     let query = supabase
       .from("appointments")
-      .select("start_time, end_time")
+      .select("start_time, end_time, is_manual")
+      .eq("is_manual", false)                  // 🟩 IGNORA MANUAL
       .gte("start_time", `${date}T00:00:00`)
       .lte("start_time", `${date}T23:59:59`);
 
@@ -72,7 +77,7 @@ if (!schedule || schedule.start_time === "00:00:00" || schedule.end_time === "00
       end: new Date(b.end_time).getTime(),
     }));
 
-    // 4. GERAR HORÁRIOS EXATOS DO BANCO (sem intervalos artificiais)
+    // 4. Gerar horários de acordo com o banco (sem 30/30 artificiais)
     const startHour = parseInt(open.split(":")[0]);
     const endHour = parseInt(close.split(":")[0]);
 
@@ -82,13 +87,13 @@ if (!schedule || schedule.start_time === "00:00:00" || schedule.end_time === "00
       const full = `${hh}:00`;
       slots.push(full);
 
-      // Adicionar 13:30 SE NÃO ESTIVER NO BREAK
+      // Adicionar 13:30 SE NÃO ESTIVER NA PAUSA
       if (h === 13 && breakEnd === "13:30:00") {
         slots.push("13:30");
       }
     }
 
-    // Remover pausas
+    // Remover horários dentro da pausa
     const filtered = slots.filter((slot) => {
       if (!breakStart || !breakEnd) return true;
 
@@ -99,7 +104,7 @@ if (!schedule || schedule.start_time === "00:00:00" || schedule.end_time === "00
       return !(t >= pauseStart && t < pauseEnd);
     });
 
-    // 5. Verificar conflitos com duração
+    // 5. Verificar conflitos
     const available = filtered.filter((slot) => {
       const start = makeLocal(date, slot).getTime();
       const end = start + duration * 60000;
