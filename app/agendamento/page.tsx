@@ -2,7 +2,16 @@
 
 import { useRouter } from "next/navigation";
 import React, { useEffect, useState, useMemo } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  CalendarDays,
+  Clock,
+  Sparkles,
+  Timer,
+  CreditCard,
+  User2,
+} from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 const BG =
@@ -29,10 +38,10 @@ interface Service {
   id: string;
   name: string;
   description?: string | null;
-  price: number;                      // agora number
+  price: number;
   image_url?: string | null;
   duration_minutes?: number | null;
-  discount_percent?: number | null;   // novo campo
+  discount_percent?: number | null;
 }
 
 interface Professional {
@@ -70,8 +79,7 @@ export default function AgendamentoPage() {
 
   // Seleções
   const [selectedService, setSelectedService] = useState<Service | null>(null);
-  const [selectedProfessional, setSelectedProfessional] =
-    useState<Professional | null>(null);
+  const [selectedProfessional, setSelectedProfessional] = useState<Professional | null>(null);
   const [selectedDate, setSelectedDate] = useState<number | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
 
@@ -85,7 +93,8 @@ export default function AgendamentoPage() {
     telefone: "",
     email: "",
   });
-   const [closed, setClosed] = useState(false);
+
+  const [closed, setClosed] = useState(false);
 
   const handleInputChange = (field: keyof typeof formData, value: string) =>
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -101,10 +110,7 @@ export default function AgendamentoPage() {
     const digits = raw.replace(/\D/g, "");
     if (digits.length <= 2) return digits;
     if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
-    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(
-      6,
-      10
-    )}`;
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6, 10)}`;
   }
 
   function isValidBrazilianPhone(raw: string): boolean {
@@ -120,41 +126,34 @@ export default function AgendamentoPage() {
   const [bookingSuccess, setBookingSuccess] = useState<boolean>(false);
 
   // Pagamento
-  const [paymentPolicy, setPaymentPolicy] =
-    useState<PaymentPolicy>("full");
-  const [paymentMode, setPaymentMode] =
-    useState<PaymentMode>("percent");
+  const [paymentPolicy, setPaymentPolicy] = useState<PaymentPolicy>("full");
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>("percent");
   const [paymentValue, setPaymentValue] = useState<number>(30);
 
   const [step, setStep] = useState<number>(1);
 
   /* ============================================================
-   * Carregar dados do cliente do navegador (localStorage)
+   * Carregar dados do cliente do navegador
    * ============================================================ */
   useEffect(() => {
     if (typeof window === "undefined") return;
+
     try {
       const saved = window.localStorage.getItem(CLIENT_DATA_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        setFormData((prev) => ({
-          ...prev,
-          ...parsed,
-        }));
+        setFormData((prev) => ({ ...prev, ...parsed }));
       }
     } catch (e) {
       console.error("Erro ao carregar dados do cliente:", e);
     }
   }, []);
 
-  // Sempre que o cliente digitar, salva no navegador
+  // Sempre que digitar, salva
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      window.localStorage.setItem(
-        CLIENT_DATA_KEY,
-        JSON.stringify(formData)
-      );
+      window.localStorage.setItem(CLIENT_DATA_KEY, JSON.stringify(formData));
     } catch (e) {
       console.error("Erro ao salvar dados do cliente:", e);
     }
@@ -169,9 +168,7 @@ export default function AgendamentoPage() {
 
       const { data: servicesData } = await supabase
         .from("services")
-        .select(
-          "id, name, description, price, image_url, duration_minutes, discount_percent"
-        );
+        .select("id, name, description, price, image_url, duration_minutes, discount_percent");
       setServices((servicesData as Service[]) || []);
 
       const { data: profData } = await supabase
@@ -179,14 +176,13 @@ export default function AgendamentoPage() {
         .select("id, name, specialty, image_url, bio");
       setProfessionals((profData as Professional[]) || []);
 
-      const { data: schedulesData } = await supabase
-        .from("schedules")
-        .select("*");
+      const { data: schedulesData } = await supabase.from("schedules").select("*");
       setAvailableSchedules((schedulesData as Schedule[]) || []);
 
       const { data: settingsData } = await supabase
         .from("settings")
         .select("key, value");
+
       if (settingsData) {
         const getVal = (k: string, def?: any) =>
           (settingsData as any[]).find((s) => s.key === k)?.value ?? def;
@@ -198,11 +194,12 @@ export default function AgendamentoPage() {
 
       setLoading(false);
     }
+
     fetchData();
   }, []);
 
   /* ============================================================
-   * Calcular valor devido (considerando desconto)
+   * Calcular valor devido
    * ============================================================ */
   const amountDue = useMemo(() => {
     if (!selectedService) return 0;
@@ -219,74 +216,61 @@ export default function AgendamentoPage() {
     return paymentMode === "percent"
       ? (priceWithDiscount * paymentValue) / 100
       : paymentValue;
-  }, [
-    selectedService,
-    paymentPolicy,
-    paymentMode,
-    paymentValue,
-  ]);
-
-/* ============================================================
- * Horários disponíveis
- * ============================================================ */
-useEffect(() => {
-  async function fetchAvailable() {
-    if (!selectedDate || !selectedProfessional || !selectedService) {
-      setTimeSlots([]);
-      setClosed(false);
-      return;
-    }
-
-    const yyyy = currentMonth.getFullYear();
-    const mm = String(currentMonth.getMonth() + 1).padStart(2, "0");
-    const dd = String(selectedDate).padStart(2, "0");
-
-    const res = await fetch("/api/appointments/available", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        date: `${yyyy}-${mm}-${dd}`,
-        professional_id: selectedProfessional.id,
-        service_id: selectedService.id,
-      }),
-    });
-
-    const data = await res.json();
-
-    setClosed(Boolean(data.closed));
-    setTimeSlots(data.available ?? []);
-  }
-
-  fetchAvailable();
-}, [selectedDate, selectedProfessional, selectedService, currentMonth]);
+  }, [selectedService, paymentPolicy, paymentMode, paymentValue]);
 
   /* ============================================================
-   * Criar cliente caso não exista
+   * Horários disponíveis
    * ============================================================ */
-  async function ensureClient(
-    name: string,
-    email: string,
-    phone: string
-  ): Promise<string> {
-    const { data: existing, error: existingError } = await supabase
+  useEffect(() => {
+    async function fetchAvailable() {
+      if (!selectedDate || !selectedProfessional || !selectedService) {
+        setTimeSlots([]);
+        setClosed(false);
+        return;
+      }
+
+      const yyyy = currentMonth.getFullYear();
+      const mm = String(currentMonth.getMonth() + 1).padStart(2, "0");
+      const dd = String(selectedDate).padStart(2, "0");
+
+      const res = await fetch("/api/appointments/available", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: `${yyyy}-${mm}-${dd}`,
+          professional_id: selectedProfessional.id,
+          service_id: selectedService.id,
+        }),
+      });
+
+      const data = await res.json();
+
+      setClosed(Boolean(data.closed));
+      setTimeSlots(data.available ?? []);
+    }
+
+    fetchAvailable();
+  }, [selectedDate, selectedProfessional, selectedService, currentMonth]);
+
+  /* ============================================================
+   * Criar cliente
+   * ============================================================ */
+  async function ensureClient(name: string, email: string, phone: string): Promise<string> {
+    const { data: existing } = await supabase
       .from("clients")
       .select("id")
       .eq("email", email)
       .maybeSingle();
 
-    if (existingError) throw new Error("Erro ao buscar cliente.");
-
     if (existing?.id) return existing.id;
 
-    const { data: created, error: createError } = await supabase
+    const { data: created } = await supabase
       .from("clients")
       .insert({ full_name: name, email, phone })
       .select("id")
       .single();
 
-    if (createError) throw new Error("Erro ao criar cliente.");
-
-    return created.id;
+    return created?.id!;
   }
 
   /* ============================================================
@@ -325,13 +309,7 @@ useEffect(() => {
 
     const startTime = `${yyyy}-${mm2}-${dd2}T${hh}:${mm}:00`;
 
-    const endD = new Date(
-      yyyy,
-      currentMonth.getMonth(),
-      selectedDate,
-      Number(hh),
-      Number(mm)
-    );
+    const endD = new Date(yyyy, currentMonth.getMonth(), selectedDate, Number(hh), Number(mm));
     endD.setMinutes(endD.getMinutes() + duration);
 
     const endH = String(endD.getHours()).padStart(2, "0");
@@ -339,7 +317,7 @@ useEffect(() => {
 
     const endTime = `${yyyy}-${mm2}-${dd2}T${endH}:${endM}:00`;
 
-    // ================= SEM PAGAMENTO =================
+    // SEM PAGAMENTO
     if (paymentPolicy === "none") {
       const res = await fetch("/api/agendar", {
         method: "POST",
@@ -348,10 +326,8 @@ useEffect(() => {
           name: formData.nome,
           email: formData.email,
           phone: normalizePhone(formData.telefone),
-
           start_time: startTime,
           end_time: endTime,
-
           service: selectedService.name,
           service_id: selectedService.id,
           professional_id: selectedProfessional.id,
@@ -372,7 +348,7 @@ useEffect(() => {
       return;
     }
 
-    // ================= COM PAGAMENTO =================
+    // COM PAGAMENTO
     const payload = {
       serviceId: selectedService.id,
       professionalId: selectedProfessional.id,
@@ -384,7 +360,7 @@ useEffect(() => {
       },
       startTime,
       endTime,
-      price: amountDue, // já baseado no preço com desconto
+      price: amountDue,
       policy: paymentPolicy,
     };
 
@@ -433,6 +409,7 @@ useEffect(() => {
       }}
     >
       <div className="w-full max-w-5xl bg-[#111111]/60 backdrop-blur-xl border border-[#ffffff15] rounded-[28px] shadow-[0_0_80px_rgba(0,0,0,0.45)] p-10">
+
         {/* Título */}
         <h1 className="text-center text-[3rem] font-serif tracking-tight text-[#E8DCC3] mb-12">
           Agendamento
@@ -459,7 +436,7 @@ useEffect(() => {
 
         {/* STEP 1 — Serviço */}
         {step === 1 && (
-          <div>
+          <>
             <h2 className="text-2xl font-semibold text-[#D6C6AA] mb-8 text-center">
               Selecione o Serviço
             </h2>
@@ -470,10 +447,7 @@ useEffect(() => {
                 const hasDiscount =
                   service.discount_percent != null &&
                   service.discount_percent > 0;
-                const finalPrice = applyDiscount(
-                  basePrice,
-                  service.discount_percent
-                );
+                const finalPrice = applyDiscount(basePrice, service.discount_percent);
 
                 return (
                   <button
@@ -499,11 +473,12 @@ useEffect(() => {
                       }
                       className="w-full h-40 object-cover rounded-lg opacity-90 group-hover:opacity-100 transition"
                     />
-{service.description && (
-  <p className="text-xs text-gray-400 mt-1 leading-relaxed">
-    {service.description}
-  </p>
-)}
+
+                    {service.description && (
+                      <p className="text-xs text-gray-400 mt-1 leading-relaxed">
+                        {service.description}
+                      </p>
+                    )}
 
                     <div className="mt-4 text-lg text-[#E8DCC3] font-serif">
                       {service.name}
@@ -530,12 +505,12 @@ useEffect(() => {
                 );
               })}
             </div>
-          </div>
+          </>
         )}
 
         {/* STEP 2 — Profissional */}
         {step === 2 && (
-          <div>
+          <>
             <h2 className="text-2xl font-semibold text-[#E8DCC3] mb-8 text-center">
               Escolha o Profissional
             </h2>
@@ -580,12 +555,13 @@ useEffect(() => {
             >
               <ChevronLeft className="w-5 h-5" /> Voltar
             </button>
-          </div>
+          </>
         )}
 
         {/* STEP 3 — Calendário + Horários */}
         {step === 3 && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+
             {/* Calendário */}
             <div className="bg-[#111] border border-[#2a2a2a] rounded-2xl p-6 shadow-lg">
               <h2 className="text-xl font-semibold text-[#E8DCC3] mb-6">
@@ -630,11 +606,9 @@ useEffect(() => {
               </div>
 
               <div className="grid grid-cols-7 gap-1 text-center text-xs text-gray-400 mb-1">
-                {["dom", "seg", "ter", "qua", "qui", "sex", "sab"].map(
-                  (d) => (
-                    <span key={d}>{d}</span>
-                  )
-                )}
+                {["dom", "seg", "ter", "qua", "qui", "sex", "sab"].map((d) => (
+                  <span key={d}>{d}</span>
+                ))}
               </div>
 
               <div className="grid grid-cols-7 gap-2 text-center">
@@ -642,29 +616,28 @@ useEffect(() => {
                   <span key={i} />
                 ))}
 
-                {Array.from(
-                  { length: daysInMonth },
-                  (_, i) => i + 1
-                ).map((day) => {
-                  const selected = selectedDate === day;
+                {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(
+                  (day) => {
+                    const selected = selectedDate === day;
 
-                  return (
-                    <button
-                      key={day}
-                      onClick={() => setSelectedDate(day)}
-                      className={`
-                        p-2 rounded-lg text-sm transition
-                        ${
-                          selected
-                            ? "bg-[#E8DCC3] text-black shadow-md"
-                            : "text-gray-300 hover:bg-[#272727]"
-                        }
-                      `}
-                    >
-                      {day}
-                    </button>
-                  );
-                })}
+                    return (
+                      <button
+                        key={day}
+                        onClick={() => setSelectedDate(day)}
+                        className={`
+                          p-2 rounded-lg text-sm transition
+                          ${
+                            selected
+                              ? "bg-[#E8DCC3] text-black shadow-md"
+                              : "text-gray-300 hover:bg-[#272727]"
+                          }
+                        `}
+                      >
+                        {day}
+                      </button>
+                    );
+                  }
+                )}
               </div>
 
               <h3 className="mt-6 text-[#E8DCC3] font-medium text-sm">
@@ -672,47 +645,48 @@ useEffect(() => {
               </h3>
 
               <div className="flex flex-wrap gap-2 mt-3">
-{closed ? (
-<div className="flex items-center gap-2 text-red-400 font-semibold text-sm">
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff4f4f" strokeWidth="2">
-    <circle cx="12" cy="12" r="10"></circle>
-    <line x1="15" y1="9" x2="9" y2="15"></line>
-    <line x1="9" y1="9" x2="15" y2="15"></line>
-  </svg>
-  Fechado neste dia
-</div>
-) : timeSlots.length > 0 ? (
-  timeSlots.map((t) => (
-    <button
-      key={t}
-      onClick={() => setSelectedTime(t)}
-      className={`
-        px-4 py-2 rounded-full text-sm transition
-        ${
-          selectedTime === t
-            ? "bg-[#E8DCC3] text-black shadow-lg"
-            : "bg-[#1d1d1d] text-gray-300 hover:bg-[#2a2a2a]"
-        }
-      `}
-    >
-      {t}
-    </button>
-  ))
-) : (
-  <p className="text-gray-500 text-sm mt-2">
-    Nenhum horário disponível
-  </p>
-)}
+                {closed ? (
+                  <div className="flex items-center gap-2 text-red-400 font-semibold text-sm">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff4f4f" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <line x1="15" y1="9" x2="9" y2="15"></line>
+                      <line x1="9" y1="9" x2="15" y2="15"></line>
+                    </svg>
+                    Fechado neste dia
+                  </div>
+                ) : timeSlots.length > 0 ? (
+                  timeSlots.map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setSelectedTime(t)}
+                      className={`
+                        px-4 py-2 rounded-full text-sm transition
+                        ${
+                          selectedTime === t
+                            ? "bg-[#E8DCC3] text-black shadow-lg"
+                            : "bg-[#1d1d1d] text-gray-300 hover:bg-[#2a2a2a]"
+                        }
+                      `}
+                    >
+                      {t}
+                    </button>
+                  ))
+                ) : (
+                  <p className="text-gray-500 text-sm mt-2">
+                    Nenhum horário disponível
+                  </p>
+                )}
               </div>
             </div>
 
-            {/* Detalhes do Agendamento */}
+            {/* Detalhes */}
             <div className="bg-[#111] border border-[#2a2a2a] rounded-2xl p-6 shadow-lg">
               <h4 className="text-xl font-semibold text-[#E8DCC3] mb-4">
                 Detalhes do Agendamento
               </h4>
 
               <div className="space-y-2 text-sm text-gray-300">
+
                 {selectedService && (
                   <p>
                     <span className="text-gray-400">Serviço:</span>{" "}
@@ -755,17 +729,14 @@ useEffect(() => {
                         Valor do serviço:
                       </span>{" "}
                       <span className="text-white">
-                        R${" "}
-                        {formatCurrency(
-                          Number(selectedService.price ?? 0)
-                        )}
+                        R$ {formatCurrency(Number(selectedService.price ?? 0))}
                       </span>
                     </p>
+
                     {selectedService.discount_percent &&
                       selectedService.discount_percent > 0 && (
                         <p className="text-xs text-gray-400">
-                          Com desconto: R${" "}
-                          {formatCurrency(
+                          Com desconto: R$ {formatCurrency(
                             applyDiscount(
                               Number(selectedService.price ?? 0),
                               selectedService.discount_percent
@@ -796,29 +767,34 @@ useEffect(() => {
                 >
                   <ChevronLeft className="w-5 h-5" /> Voltar
                 </button>
-
-                <button
-                  onClick={() => setStep(4)}
-                  disabled={!selectedDate || !selectedTime}
-                  className="bg-[#E8DCC3] text-black font-semibold px-6 py-3 rounded-xl hover:bg-[#f3ead6] transition disabled:opacity-40"
-                >
-                  Continuar{" "}
-                  <ChevronRight className="w-5 h-5 inline-block ml-2" />
-                </button>
+<button
+  onClick={() => setStep(4)}
+  disabled={!selectedDate || !selectedTime}
+  className="
+    bg-[#E8DCC3] text-black font-semibold 
+    px-5 py-2 rounded-xl 
+    hover:bg-[#f3ead6] transition
+    disabled:opacity-40
+    text-sm
+    sm:text-base
+  "
+>
+  Continuar <ChevronRight className="w-5 h-5 inline-block ml-1" />
+</button>
               </div>
             </div>
           </div>
         )}
 
-        {/* STEP 4 — Dados do Cliente */}
+        {/* STEP 4 — Dados Cliente */}
         {step === 4 && (
-          <div>
+          <>
+
             <h2 className="text-2xl font-semibold text-[#D6C6AA] mb-6 text-center">
               Seus Dados
             </h2>
 
             <div className="space-y-4 max-w-lg mx-auto">
-              {/* Nome */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
                   Nome Completo
@@ -826,15 +802,12 @@ useEffect(() => {
                 <input
                   type="text"
                   value={formData.nome}
-                  onChange={(e) =>
-                    handleInputChange("nome", e.target.value)
-                  }
+                  onChange={(e) => handleInputChange("nome", e.target.value)}
                   className="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white"
                   placeholder="Digite seu nome completo"
                 />
               </div>
 
-              {/* Telefone */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
                   Telefone (WhatsApp)
@@ -843,10 +816,7 @@ useEffect(() => {
                   type="tel"
                   value={formData.telefone}
                   onChange={(e) =>
-                    handleInputChange(
-                      "telefone",
-                      formatPhone(e.target.value)
-                    )
+                    handleInputChange("telefone", formatPhone(e.target.value))
                   }
                   className="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white"
                   placeholder="(73) 9840-1234"
@@ -854,13 +824,11 @@ useEffect(() => {
                 {formData.telefone &&
                   !isValidBrazilianPhone(formData.telefone) && (
                     <p className="text-red-400 text-sm mt-1">
-                      Digite DD + número sem o 9 extra. Ex: (73)
-                      9840-1234
+                      Digite DD + número sem o 9 extra. Ex: (73) 9840-1234
                     </p>
                   )}
               </div>
 
-              {/* Email */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
                   E-mail
@@ -877,7 +845,7 @@ useEffect(() => {
               </div>
             </div>
 
-            <div className="flex justify-between mt-8">
+            <div className="flex justify-between mt-8 items-center gap-3">
               <button
                 onClick={() => setStep(3)}
                 className="text-gray-400 hover:text-[#D6C6AA] transition-colors flex items-center gap-2"
@@ -894,136 +862,180 @@ useEffect(() => {
                 }
                 className="bg-[#D6C6AA] text-black font-semibold px-6 py-2 rounded-lg hover:bg-[#e5d8c2] transition-colors disabled:opacity-50"
               >
-                Revisar{" "}
-                <ChevronRight className="w-5 h-5 inline-block ml-2" />
+                Revisar <ChevronRight className="w-5 h-5 inline-block ml-2" />
               </button>
             </div>
-          </div>
+
+          </>
         )}
 
-        {/* STEP 5 — Revisão */}
+        {/* STEP 5 — CONFIRMAÇÃO */}
         {step === 5 && (
-          <div>
-            <h2 className="text-center text-[1.75rem] font-semibold text-[#E8DCC3] mb-10">
+          <div className="flex flex-col items-center">
+
+            <h2 className="text-center text-[2rem] font-semibold text-[#E8DCC3] mb-10">
               Confirme seu Agendamento
             </h2>
 
-            <div className="bg-[#111] border border-[#2a2a2a] rounded-2xl p-8 shadow-xl max-w-xl w-full mx-auto text-gray-300 space-y-3">
-              <h3 className="text-[#E8DCC3] text-xl font-medium mb-4">
-                Detalhes:
-              </h3>
+            <div className="bg-[#111] border border-[#2a2a2a] rounded-2xl p-8 shadow-xl max-w-xl w-full mx-auto text-gray-300 space-y-6">
 
-              <p>
-                <span className="text-[#E8DCC3]/80">Serviço:</span>{" "}
-                {selectedService?.name}
-              </p>
-              <p>
-                <span className="text-[#E8DCC3]/80">
-                  Profissional:
-                </span>{" "}
-                {selectedProfessional?.name}
-              </p>
-              <p>
-                <span className="text-[#E8DCC3]/80">Data:</span>{" "}
-                {selectedDate} de{" "}
-                {currentMonth.toLocaleDateString("pt-BR", {
-                  month: "long",
-                })}
-              </p>
-              <p>
-                <span className="text-[#E8DCC3]/80">Horário:</span>{" "}
-                {selectedTime}
-              </p>
-              <p>
-                <span className="text-[#E8DCC3]/80">Nome:</span>{" "}
-                {formData.nome}
-              </p>
-              <p>
-                <span className="text-[#E8DCC3]/80">Telefone:</span>{" "}
-                {formData.telefone}
-              </p>
-              <p>
-                <span className="text-[#E8DCC3]/80">E-mail:</span>{" "}
-                {formData.email}
-              </p>
-
-              {selectedService?.duration_minutes && (
-                <p>
-                  <span className="text-[#E8DCC3]/80">
-                    Duração:
-                  </span>{" "}
-                  {selectedService.duration_minutes} min
-                </p>
-              )}
-
-              {selectedService && (
-                <p>
-                  <span className="text-[#E8DCC3]/80">
-                    Valor do serviço:
-                  </span>{" "}
-                  R${" "}
-                  {formatCurrency(
-                    Number(selectedService.price ?? 0)
-                  )}
-                </p>
-              )}
-
-              {selectedService?.discount_percent &&
-                selectedService.discount_percent > 0 && (
-                  <p className="text-sm text-gray-400">
-                    Com desconto: R${" "}
-                    {formatCurrency(
-                      applyDiscount(
-                        Number(selectedService.price ?? 0),
-                        selectedService.discount_percent
-                      )
-                    )}{" "}
-                    ({selectedService.discount_percent}% de
-                    desconto)
+              <div className="flex items-center gap-4">
+                <img
+                  src={
+                    selectedProfessional?.image_url ??
+                    "https://via.placeholder.com/100"
+                  }
+                  className="w-20 h-20 rounded-xl object-cover border border-[#3a3a3a]"
+                />
+                <div>
+                  <h3 className="text-[#E8DCC3] text-xl font-medium">
+                    {selectedProfessional?.name}
+                  </h3>
+                  <p className="text-gray-400 text-sm">
+                    {selectedProfessional?.specialty}
                   </p>
+                </div>
+              </div>
+
+              <div className="border-t border-[#2a2a2a] pt-6 space-y-3 text-sm">
+
+                <div className="flex justify-between">
+                  <span className="text-gray-400 flex items-center gap-2">
+                    <CalendarDays className="w-4 h-4 text-[#D6C6AA]" /> Data
+                  </span>
+                  <span className="text-white">
+                    {selectedDate} de{" "}
+                    {currentMonth.toLocaleDateString("pt-BR", {
+                      month: "long",
+                    })}
+                  </span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-gray-400 flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-[#D6C6AA]" /> Horário
+                  </span>
+                  <span className="text-white">{selectedTime}</span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-gray-400 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-[#D6C6AA]" /> Serviço
+                  </span>
+                  <span className="text-white">
+                    {selectedService?.name}
+                  </span>
+                </div>
+
+                {selectedService?.duration_minutes && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-400 flex items-center gap-2">
+                      <Timer className="w-4 h-4 text-[#D6C6AA]" /> Duração
+                    </span>
+                    <span className="text-white">
+                      {selectedService.duration_minutes} min
+                    </span>
+                  </div>
                 )}
 
-              {paymentPolicy === "none" ? (
-                <p className="text-[#E8DCC3] text-lg font-semibold mt-4">
-                  Sem pagamento antecipado
-                </p>
-              ) : (
-                <p className="text-[#E8DCC3] text-lg font-semibold mt-4">
-                  A pagar agora: R$ {formatCurrency(amountDue)}
-                </p>
-              )}
+                <div className="flex justify-between">
+                  <span className="text-gray-400 flex items-center gap-2">
+                    <CreditCard className="w-4 h-4 text-[#D6C6AA]" /> Valor
+                  </span>
+                  <span className="text-white">
+                    R$ {formatCurrency(Number(selectedService?.price ?? 0))}
+                  </span>
+                </div>
+
+{(selectedService?.discount_percent ?? 0) > 0 && (
+  <div className="text-right text-xs text-gray-400">
+    com desconto: R${" "}
+    {formatCurrency(
+      applyDiscount(
+        Number(selectedService?.price ?? 0),
+        selectedService?.discount_percent ?? 0
+      )
+    )}{" "}
+    ({selectedService?.discount_percent}%)
+  </div>
+)}
+
+
+                <div className="flex justify-between pt-4 border-t border-[#2a2a2a]">
+                  <span className="text-gray-400 flex items-center gap-2">
+                    <User2 className="w-4 h-4 text-[#D6C6AA]" /> Cliente
+                  </span>
+                  <span className="text-white">{formData.nome}</span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Telefone</span>
+                  <span className="text-white">{formData.telefone}</span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-gray-400">E-mail</span>
+                  <span className="text-white">{formData.email}</span>
+                </div>
+
+                <div className="pt-4 border-t border-[#2a2a2a] text-center">
+                  {paymentPolicy === "none" ? (
+                    <p className="text-[#E8DCC3] text-lg font-semibold">
+                      Sem pagamento antecipado
+                    </p>
+                  ) : (
+                    <p className="text-[#E8DCC3] text-lg font-semibold">
+                      A pagar agora: R$ {formatCurrency(amountDue)}
+                    </p>
+                  )}
+                </div>
+
+              </div>
             </div>
+<div
+  className="
+    max-w-xl w-full mx-auto 
+    flex justify-between items-center
+    mt-10 gap-3
+  "
+>
+  <button
+    onClick={() => setStep(4)}
+    className="text-gray-400 hover:text-[#E8DCC3] transition flex items-center gap-2 text-sm"
+  >
+    <ChevronLeft className="w-5 h-5" /> Voltar
+  </button>
 
-            <div className="max-w-xl w-full mx-auto flex justify-between mt-10">
-              <button
-                onClick={() => setStep(4)}
-                className="text-gray-400 hover:text-[#E8DCC3] transition flex items-center gap-2"
-              >
-                <ChevronLeft className="w-5 h-5" /> Voltar
-              </button>
-
-            <button
-              onClick={handleSubmitBooking}
-              disabled={loading}
-              className="bg-[#E8DCC3] text-black font-semibold px-8 py-3 rounded-xl hover:bg-[#f3ead6] transition disabled:opacity-40"
-            >
-              {loading ? "Processando..." : "Confirmar Agendamento"}
-            </button>
-            </div>
-
-            {error && (
-              <p className="text-red-500 mt-4 text-center">
-                {error}
-              </p>
-            )}
-
-            {bookingSuccess && (
-              <p className="text-green-500 mt-4 text-center">
-                Agendamento criado com sucesso!
-              </p>
-            )}
+  <button
+    onClick={handleSubmitBooking}
+    disabled={loading}
+    className="
+      bg-[#E8DCC3] text-black font-semibold 
+      px-5 py-3 
+      rounded-xl 
+      hover:bg-[#f3ead6]
+      transition disabled:opacity-40
+      text-sm
+    "
+  >
+    {loading ? "Processando..." : "Confirmar Agendamento"}
+  </button>
+</div>
           </div>
         )}
+
+        {error && (
+          <p className="text-red-500 mt-4 text-center">
+            {error}
+          </p>
+        )}
+
+        {bookingSuccess && (
+          <p className="text-green-500 mt-4 text-center">
+            Agendamento criado com sucesso!
+          </p>
+        )}
+
       </div>
     </main>
   );
