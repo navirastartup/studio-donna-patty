@@ -332,13 +332,19 @@ export default function MinhaAgendaPage() {
     };
   }, [clientId]);
 
-  const nextAppointment = useMemo(() => {
-    const now = new Date().toISOString();
-    return (
-      appointments.find((a) => a.start_time >= now && a.status !== "cancelled") ||
-      null
-    );
-  }, [appointments]);
+const nextAppointment = useMemo(() => {
+  const now = new Date().toISOString();
+  return (
+    appointments.find(
+      (a) =>
+        a.start_time >= now &&
+        !["cancelled", "finished", "completed", "done"].includes(
+          a.status?.toLowerCase()
+        )
+    ) || null
+  );
+}, [appointments]);
+
 
   if (!clientId) {
     return (
