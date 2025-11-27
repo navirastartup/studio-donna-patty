@@ -40,7 +40,7 @@ export async function sendEmailConfirmation(
     `;
 
     await resend.emails.send({
-      from: "Studio Donna Patty <no-reply@studiodonnapatty.site>"
+      from: "Studio Donna Patty <no-reply@studiodonnapatty.site>",
       to: email,
       subject: `Confirmação de agendamento — ${service}`,
       html,
