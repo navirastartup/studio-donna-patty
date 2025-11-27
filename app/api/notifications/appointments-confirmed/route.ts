@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
-// ⚙️ Inicializa Resend
+
+// Inicializa Resend com ENV da Vercel
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// 💎 Template de e-mail premium (sem emojis)
+// Template premium
 function getEmailHTML({
   nomeCliente,
   data,
@@ -136,9 +137,9 @@ export async function POST(req: Request) {
       );
     }
 
-    // ✉️ Envia o e-mail pelo Resend
+    // Envio real pelo Resend
     const email = await resend.emails.send({
-      from: "Studio Donna Patty <onboarding@resend.dev>",
+      from: "Studio Donna Patty <no-reply@studiodonnapatty.site>",
       to: emailCliente,
       subject: "Agendamento Confirmado — Studio Donna Patty",
       html: getEmailHTML({
@@ -151,7 +152,7 @@ export async function POST(req: Request) {
       }),
     });
 
-    // 📩 Log do WhatsApp (simulação)
+    // WhatsApp mock (seguro)
     console.log(`
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  Mensagem enviada para ${whatsapp || "sem número"}:
@@ -163,14 +164,6 @@ Profissional: ${profissional}
 Link: ${linkAgendamento}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     `);
-
-    async function sendWhatsAppMessageMock() {
-      console.log("📵 WhatsApp desativado no deploy — mock executado.");
-    }
-    
-    // substitui o bot REAL por um mock seguro para deploy
-const sendWhatsAppMessage = sendWhatsAppMessageMock;
-
 
     return NextResponse.json({ success: true, email });
   } catch (error: any) {

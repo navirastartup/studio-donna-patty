@@ -15,7 +15,9 @@ export async function sendWhatsAppConfirmation(
   name: string,
   date: string,
   time: string,
-  service: string
+  service: string,
+  professionalName: string,
+  linkagendamentos: string,
 ) {
   if (typeof window !== "undefined") return;
 

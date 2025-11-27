@@ -10,7 +10,9 @@ export async function sendEmailConfirmation(
   name: string,
   date: string,
   time: string,
-  service: string
+  service: string,
+  professionalName: string,
+  linkagendamentos: string,
 ) {
   try {
     const html = `
