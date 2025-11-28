@@ -33,45 +33,79 @@ export async function sendEmailConfirmation(
         border:1px solid #1f2535;
         overflow:hidden;
       ">
-        <!-- Header -->
-        <div style="padding:28px 32px;border-bottom:1px solid #1f2535;text-align:center">
-          <h1 style="margin:0;color:#D6C6AA;font-size:22px;font-weight:600;">
-            ✨ Confirmação de Agendamento ✨
-          </h1>
-          <p style="margin:8px 0 0;color:#9ca3af;font-size:13px;">
-            Seu horário foi reservado com sucesso no <strong style="color:#E5DCC5;">Studio Donna Patty</strong>.
-          </p>
+        <!-- HEADER -->
+        <div style="
+          padding:20px 28px;
+          border-bottom:1px solid #1f2535;
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+        ">
+          <div>
+            <div style="color:#9ca3af;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;">
+              Confirmação de agendamento
+            </div>
+            <h1 style="margin:4px 0 0;color:#D6C6AA;font-size:20px;font-weight:600;">
+              Studio Donna Patty
+            </h1>
+          </div>
+          <div style="
+            width:34px;
+            height:34px;
+            border-radius:999px;
+            border:1px solid #2b3243;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            font-size:16px;
+            color:#D6C6AA;
+          ">
+            ✓
+          </div>
         </div>
 
-        <!-- Conteúdo -->
-        <div style="padding:28px 32px;color:#e5e7eb;font-size:14px;line-height:1.7;">
-          <p style="margin-top:0;">
-            Olá, <strong style="color:#fff;">${nomeCliente}</strong>!
+        <!-- CONTEÚDO -->
+        <div style="padding:26px 28px;color:#e5e7eb;font-size:14px;line-height:1.7;">
+          <p style="margin:0 0 12px;">
+            Olá, <strong style="color:#ffffff;">${nomeCliente}</strong>.
           </p>
 
-          <p>
-            Seu agendamento foi confirmado com os seguintes detalhes:
+          <p style="margin:0 0 18px;">
+            Seu horário foi confirmado com os dados abaixo:
           </p>
 
+          <!-- BLOCO DE DETALHES -->
           <div style="
-            margin:18px 0 22px;
-            padding:18px 16px;
+            margin:0 0 22px;
+            padding:16px 18px;
             background:#111827;
             border-radius:12px;
             border:1px solid #1f2937;
           ">
-            <p style="margin:4px 0;"><strong>Serviço:</strong> ${servico}</p>
-            <p style="margin:4px 0;"><strong>Profissional:</strong> ${profissional}</p>
-            <p style="margin:4px 0;"><strong>Data:</strong> ${data}</p>
-            <p style="margin:4px 0;"><strong>Horário:</strong> ${hora}</p>
+            <p style="margin:4px 0;">
+              <span style="display:inline-block;width:18px;color:#D6C6AA;">■</span>
+              <strong>Serviço:</strong> ${servico}
+            </p>
+            <p style="margin:4px 0;">
+              <span style="display:inline-block;width:18px;color:#D6C6AA;">■</span>
+              <strong>Profissional:</strong> ${profissional}
+            </p>
+            <p style="margin:4px 0;">
+              <span style="display:inline-block;width:18px;color:#D6C6AA;">■</span>
+              <strong>Data:</strong> ${data}
+            </p>
+            <p style="margin:4px 0;">
+              <span style="display:inline-block;width:18px;color:#D6C6AA;">■</span>
+              <strong>Horário:</strong> ${hora}
+            </p>
           </div>
 
-          <p style="margin-bottom:20px;">
-            Caso precise reagendar, você pode falar conosco pelo WhatsApp
-            ou acessar seus agendamentos pelo botão abaixo:
+          <p style="margin:0 0 16px;">
+            Caso precise alterar ou cancelar, entre em contato com o Studio Donna Patty
+            com antecedência ou acesse seus agendamentos pelo link abaixo.
           </p>
 
-          <div style="text-align:center;margin-bottom:10px;">
+          <div style="text-align:center;margin:18px 0 4px;">
             <a
               href="${linkAgendamento}"
               style="
@@ -85,17 +119,17 @@ export async function sendEmailConfirmation(
                 text-decoration:none;
               "
             >
-              Ver meus agendamentos
+              Acessar meus agendamentos
             </a>
           </div>
 
-          <p style="margin-top:22px;font-size:12px;color:#9ca3af;text-align:center;">
-            Recomendamos chegar com <strong>10 minutos de antecedência</strong> para o melhor atendimento. 💜
+          <p style="margin-top:18px;font-size:12px;color:#9ca3af;text-align:center;">
+            Recomendamos chegar com alguns minutos de antecedência para um atendimento tranquilo.
           </p>
         </div>
 
-        <!-- Rodapé -->
-        <div style="padding:14px 24px;border-top:1px solid #1f2535;text-align:center;">
+        <!-- RODAPÉ -->
+        <div style="padding:12px 24px;border-top:1px solid #1f2535;text-align:center;">
           <p style="margin:0;color:#6b7280;font-size:11px;">
             Studio Donna Patty · Este é um e-mail automático, por favor não responda.
           </p>
@@ -104,10 +138,10 @@ export async function sendEmailConfirmation(
     </div>
   `;
 
-  await resend.emails.send({
-    from: "Studio Donna Patty <no-reply@studiodonnapatty.site>",
-    to: email,
-    subject: `Confirmação de agendamento — ${servico}`,
-    html,
-  });
+await resend.emails.send({
+  from: "Studio Donna Patty <no-reply@studiodonnapatty.site>",
+  to: email,
+  subject: `Confirmação de agendamento — ${servico}`,
+  html,
+});
 }

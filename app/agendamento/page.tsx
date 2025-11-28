@@ -1021,7 +1021,7 @@ export default function AgendamentoPage() {
     {loading ? "Processando..." : "Confirmar Agendamento"}
   </button>
 </div>
-          </div>
+</div>
         )}
 
         {error && (
