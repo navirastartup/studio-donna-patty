@@ -107,7 +107,7 @@ export default function Home() {
           >
             <span className="leading-none">Desenvolvido por</span>
 
-            {/* LOGO ANIMANDO A CADA 10s */}
+            {/* LOGO ANIMANDO em 10 SEGS */}
 <a
   href="https://www.instagram.com/navirasistemas/"
   target="_blank"
