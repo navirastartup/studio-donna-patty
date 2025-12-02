@@ -16,6 +16,7 @@ import { supabase } from "@/lib/supabase";
 import { useCart } from "@/context/CartContext";
 import toast from "react-hot-toast"; // <-- IMPORT OK
 import LoadingScreen from "@/components/LoadingScreen";
+import { Suspense } from "react";
 
 const BG =
   "https://images.unsplash.com/photo-1673945049132-17ff2d9f60c8?q=80&w=900&auto=format&fit=crop";
@@ -68,10 +69,23 @@ interface Schedule {
 type PaymentPolicy = "none" | "deposit" | "full";
 type PaymentMode = "percent" | "fixed";
 
+
+
+function AgendamentoPageWrapper() {
+  return (
+    <Suspense fallback={<div>Carregando...</div>}>
+      <AgendamentoPage />
+    </Suspense>
+  );
+}
+
+export default AgendamentoPageWrapper;
+
 /* ============================================================
  * Página
  * ============================================================ */
-export default function AgendamentoPage() {
+function AgendamentoPage() {
+
   const router = useRouter();
   const { addService } = useCart(); 
 
