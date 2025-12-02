@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import React, { useState, useEffect } from "react";
 import Image from "next/image";
@@ -56,9 +56,10 @@ interface Appointment {
 
 interface RescheduleState {
   id: string;
-  newDate: string;
-  slots: string[];
-  selectedSlot: string;
+  newDate: string;      // YYYY-MM-DD da data selecionada
+  currentTime: string;  // HH:MM do horário atual do agendamento
+  slots: string[];      // horários disponíveis vindos da API
+  selectedSlot: string; // horário escolhido para reagendar
   professional_id: string;
   service_id: string;
 }
@@ -102,6 +103,7 @@ export default function AgendaBasePage({
   const [reschedule, setReschedule] = useState<RescheduleState>({
     id: "",
     newDate: "",
+    currentTime: "",
     slots: [],
     selectedSlot: "",
     professional_id: "",
@@ -297,30 +299,68 @@ export default function AgendaBasePage({
     });
   };
 
-/* ============================================================
- * Excluir agendamento
- * ============================================================ */
-const deleteAppointment = async (id: string) => {
-  if (!confirm("Deseja excluir este agendamento?")) return;
+  /* ============================================================
+   * Excluir agendamento
+   * ============================================================ */
+  const deleteAppointment = async (id: string) => {
+    if (!confirm("Deseja excluir este agendamento?")) return;
 
-  try {
-    const res = await fetch("/api/appointments/delete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
+    try {
+      const res = await fetch("/api/appointments/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
 
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Erro ao excluir");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao excluir");
 
-    showNotification("🗑️ Agendamento excluído!");
-    await load();
-  } catch (err) {
-    console.error(err);
-    showNotification("❌ Erro ao excluir agendamento");
-  }
-};
+      showNotification("🗑️ Agendamento excluído!");
+      await load();
+    } catch (err) {
+      console.error(err);
+      showNotification("❌ Erro ao excluir agendamento");
+    }
+  };
 
+  /* ============================================================
+   * Buscar horários disponíveis para reagendamento
+   * (mesma ideia do "novo agendamento")
+   * ============================================================ */
+  const fetchAvailableSlots = async (
+    date: string,
+    service_id: string,
+    professional_id: string
+  ) => {
+    if (!date || !service_id || !professional_id) return;
+
+    try {
+      const result = await fetch("/api/appointments/available", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date,
+          service_id,
+          professional_id,
+        }),
+      });
+
+const json = await result.json();
+const slots: string[] = json?.available ?? [];
+
+setReschedule((prev) => ({
+  ...prev,
+  slots,
+  // se o horário atual ainda estiver livre, já deixa pré-selecionado
+  selectedSlot:
+    prev.selectedSlot ||
+    (slots.includes(prev.currentTime) ? prev.currentTime : ""),
+}));
+    } catch (err) {
+      console.error("Erro ao buscar horários disponíveis:", err);
+      showNotification("❌ Erro ao carregar horários disponíveis");
+    }
+  };
 
   /* ============================================================
    * Agrupar por dia
@@ -621,16 +661,41 @@ const deleteAppointment = async (id: string) => {
                         <div className="flex justify-end gap-2">
                           {canReschedule && (
                             <button
-                              onClick={() =>
+                              onClick={async () => {
+                                // Data local em pt-BR e depois convertida para YYYY-MM-DD
+                                const localDate = new Date(
+                                  appt.start_time
+                                ).toLocaleDateString("pt-BR", {
+                                  timeZone: "America/Sao_Paulo",
+                                });
+                                const [dia, mes, ano] = localDate.split("/");
+                                const isoDate = `${ano}-${mes}-${dia}`;
+
+                                const localTime = new Date(
+                                  appt.start_time
+                                ).toLocaleTimeString("pt-BR", {
+                                  timeZone: "America/Sao_Paulo",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                  hour12: false,
+                                });
+
                                 setReschedule({
                                   id: appt.id,
-                                  newDate: "",
+                                  newDate: isoDate,
+                                  currentTime: localTime,
                                   slots: [],
                                   selectedSlot: "",
                                   professional_id: professional?.id || "",
                                   service_id: service?.id || "",
-                                })
-                              }
+                                });
+
+                                await fetchAvailableSlots(
+                                  isoDate,
+                                  service?.id || "",
+                                  professional?.id || ""
+                                );
+                              }}
                               className="text-yellow-400 hover:text-yellow-600"
                               title="Reagendar"
                             >
@@ -679,9 +744,8 @@ const deleteAppointment = async (id: string) => {
             <p className="text-sm text-gray-300 mb-3">
               Ao concluir, o agendamento será marcado como{" "}
               <span className="font-semibold">Concluído</span>. O lançamento
-              financeiro poderá ser{" "}
-              <span className="font-semibold">Pago</span> ou{" "}
-              <span className="font-semibold">Pendente</span>.
+              financeiro poderá ser <span className="font-semibold">Pago</span>{" "}
+              ou <span className="font-semibold">Pendente</span>.
             </p>
 
             <div className="space-y-3 mb-4">
@@ -771,6 +835,154 @@ const deleteAppointment = async (id: string) => {
                 className="bg-[#D6C6AA] text-black px-4 py-2 rounded-lg hover:bg-[#e8dcbf]"
               >
                 Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================
+       * MODAL DE REAGENDAMENTO
+       * ============================================================ */}
+      {reschedule.id && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 w-full max-w-md p-6 rounded-xl border border-gray-700 shadow-lg">
+            <h2 className="text-2xl font-semibold text-[#D6C6AA] mb-4">
+              Reagendar
+            </h2>
+
+            {/* DATA ATUAL */}
+            <p className="text-gray-400 mb-2">
+              Data atual:{" "}
+              <span className="text-[#D6C6AA] font-medium">
+                {reschedule.newDate
+                  .split("-")
+                  .reverse()
+                  .join("/")}{" "}
+                às {reschedule.currentTime}
+              </span>
+            </p>
+
+            {/* INPUT DE DATA */}
+            <label className="block text-gray-300 text-sm mb-1">
+              Nova data
+            </label>
+
+            <input
+              type="date"
+              className="w-full bg-gray-800 border border-gray-700 text-white px-3 py-2 rounded-lg mb-3"
+              value={reschedule.newDate}
+              onChange={async (e) => {
+                const newDate = e.target.value;
+
+                setReschedule((prev) => ({
+                  ...prev,
+                  newDate,
+                  slots: [],
+                  selectedSlot: "",
+                }));
+
+                await fetchAvailableSlots(
+                  newDate,
+                  reschedule.service_id,
+                  reschedule.professional_id
+                );
+              }}
+            />
+
+            {/* HORÁRIOS DISPONÍVEIS */}
+            <div className="mt-4">
+              <p className="text-gray-300 text-sm mb-2">
+                Horários disponíveis
+              </p>
+
+              {reschedule.slots.length === 0 ? (
+                <p className="text-gray-500 text-sm">
+                  Selecione uma data para ver os horários.
+                </p>
+              ) : (
+                <div className="grid grid-cols-3 gap-2">
+                  {reschedule.slots.map((time) => (
+                    <button
+                      key={time}
+                      onClick={() =>
+                        setReschedule((prev) => ({
+                          ...prev,
+                          selectedSlot: time,
+                        }))
+                      }
+                      className={`px-3 py-2 rounded-lg text-sm transition ${
+                        reschedule.selectedSlot === time
+                          ? "bg-[#D6C6AA] text-black"
+                          : "bg-gray-800 border border-gray-700 text-gray-200 hover:bg-gray-700"
+                      }`}
+                    >
+                      {time}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* BOTÕES */}
+            <div className="flex justify-end gap-2 mt-6">
+              <button
+                onClick={() =>
+                  setReschedule({
+                    id: "",
+                    newDate: "",
+                    currentTime: "",
+                    slots: [],
+                    selectedSlot: "",
+                    professional_id: "",
+                    service_id: "",
+                  })
+                }
+                className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600"
+              >
+                Cancelar
+              </button>
+
+              <button
+                disabled={!reschedule.selectedSlot}
+                onClick={async () => {
+                  const res = await fetch("/api/admin/reagendar", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      id: reschedule.id,
+                      date: reschedule.newDate,
+                      time: reschedule.selectedSlot,
+                    }),
+                  });
+
+                  const json = await res.json();
+                  if (res.ok) {
+                    showNotification(
+                      "📅 Agendamento reagendado com sucesso!"
+                    );
+                    await load();
+                  } else {
+                    showNotification("❌ Erro ao reagendar: " + json.error);
+                  }
+
+                  setReschedule({
+                    id: "",
+                    newDate: "",
+                    currentTime: "",
+                    slots: [],
+                    selectedSlot: "",
+                    professional_id: "",
+                    service_id: "",
+                  });
+                }}
+                className={`px-4 py-2 rounded-lg ${
+                  reschedule.selectedSlot
+                    ? "bg-[#D6C6AA] text-black hover:bg-[#e8dcbf]"
+                    : "bg-gray-700 text-gray-400 cursor-not-allowed"
+                }`}
+              >
+                Salvar
               </button>
             </div>
           </div>

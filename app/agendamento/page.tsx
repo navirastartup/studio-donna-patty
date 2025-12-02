@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import React, { useEffect, useState, useMemo } from "react";
 import {
   ChevronLeft,
@@ -13,6 +13,9 @@ import {
   User2,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { useCart } from "@/context/CartContext";
+import toast from "react-hot-toast"; // <-- IMPORT OK
+import LoadingScreen from "@/components/LoadingScreen";
 
 const BG =
   "https://images.unsplash.com/photo-1673945049132-17ff2d9f60c8?q=80&w=900&auto=format&fit=crop";
@@ -70,6 +73,28 @@ type PaymentMode = "percent" | "fixed";
  * ============================================================ */
 export default function AgendamentoPage() {
   const router = useRouter();
+  const { addService } = useCart(); 
+
+  const searchParams = useSearchParams();
+
+// Muda o nome aqui pro que você realmente usa na URL:
+// ?serviceIndex=0  ou  ?item=abc  etc.
+const serviceKey =
+  searchParams.get("serviceIndex") ??
+  searchParams.get("item") ??
+  searchParams.get("serviceId") ??
+  ""; // fallback
+
+// função pra limpar seleção do agendamento
+function resetSelection() {
+  setSelectedProfessional(null);
+  setSelectedDate(null);
+  setSelectedTime(null);
+  setTimeSlots([]);
+  setClosed(false);
+  setStep(1); // volta pro início do fluxo (se quiser pode ser 2)
+}
+
 
   // Dados
   const [services, setServices] = useState<Service[]>([]);
@@ -197,6 +222,12 @@ export default function AgendamentoPage() {
 
     fetchData();
   }, []);
+
+  // sempre que mudar o serviço que está sendo agendado, zera escolhas
+useEffect(() => {
+  resetSelection();
+}, [serviceKey]);
+
 
   /* ============================================================
    * Calcular valor devido
@@ -393,12 +424,7 @@ export default function AgendamentoPage() {
     0
   ).getDate();
 
-  if (loading && !bookingSuccess)
-    return (
-      <main className="min-h-screen flex items-center justify-center bg-black text-[#D6C6AA] text-xl">
-        Carregando dados...
-      </main>
-    );
+if (loading) return <LoadingScreen />;
 
   return (
     <main
@@ -450,58 +476,137 @@ export default function AgendamentoPage() {
                 const finalPrice = applyDiscount(basePrice, service.discount_percent);
 
                 return (
-                  <button
-                    key={service.id}
-                    onClick={() => {
-                      setSelectedService(service);
-                      setStep(2);
-                    }}
-                    className={`
-                      group relative p-5 rounded-xl border backdrop-blur
-                      transition-all duration-300 overflow-hidden
-                      ${
-                        selectedService?.id === service.id
-                          ? "border-[#E8DCC3]/60 bg-[#E8DCC3]/5 shadow-[0_0_30px_rgba(232,220,195,0.15)]"
-                          : "border-[#ffffff10] hover:border-[#E8DCC3]/40 bg-[#ffffff05]"
-                      }
-                    `}
-                  >
-                    <img
-                      src={
-                        service.image_url ||
-                        "https://via.placeholder.com/600x400/111/aaa?text=Serviço"
-                      }
-                      className="w-full h-40 object-cover rounded-lg opacity-90 group-hover:opacity-100 transition"
-                    />
+<div
+  key={service.id}
+  onClick={() => {
+    setSelectedService(service);
+    setStep(2);
+  }}
+  className={`
+    group relative p-5 rounded-xl border backdrop-blur
+    transition-all duration-300 overflow-hidden w-full text-left cursor-pointer
+    ${
+      selectedService?.id === service.id
+        ? "border-[#E8DCC3]/60 bg-[#E8DCC3]/5 shadow-[0_0_30px_rgba(232,220,195,0.15)]"
+        : "border-[#ffffff10] hover:border-[#E8DCC3]/40 bg-[#ffffff05]"
+    }
+  `}
+>
+  <img
+    src={
+      service.image_url ||
+      "https://via.placeholder.com/600x400/111/aaa?text=Serviço"
+    }
+    className="w-full h-40 object-cover rounded-lg opacity-90 group-hover:opacity-100 transition"
+  />
 
-                    {service.description && (
-                      <p className="text-xs text-gray-400 mt-1 leading-relaxed">
-                        {service.description}
-                      </p>
-                    )}
+  {service.description && (
+    <p className="text-xs text-gray-400 mt-1 leading-relaxed">
+      {service.description}
+    </p>
+  )}
 
-                    <div className="mt-4 text-lg text-[#E8DCC3] font-serif">
-                      {service.name}
-                    </div>
+  <div className="mt-4 text-lg text-[#E8DCC3] font-serif">
+    {service.name}
+  </div>
 
-                    {!hasDiscount && (
-                      <div className="text-[#ffffffcc] font-medium mt-1">
-                        R$ {formatCurrency(basePrice)}
-                      </div>
-                    )}
+  {!hasDiscount && (
+    <div className="text-[#ffffffcc] font-medium mt-1">
+      R$ {formatCurrency(basePrice)}
+    </div>
+  )}
 
-                    {hasDiscount && (
-                      <div className="mt-1 text-sm">
-                        <div className="text-[#E8DCC3] font-semibold">
-                          R$ {formatCurrency(finalPrice)}
-                        </div>
-                        <div className="text-xs text-gray-400">
-                          De R$ {formatCurrency(basePrice)} ·{" "}
-                          {service.discount_percent}% de desconto
-                        </div>
-                      </div>
-                    )}
-                  </button>
+  {hasDiscount && (
+    <div className="mt-1 text-sm">
+      <div className="text-[#E8DCC3] font-semibold">
+        R$ {formatCurrency(finalPrice)}
+      </div>
+      <div className="text-xs text-gray-400">
+        De R$ {formatCurrency(basePrice)} · {service.discount_percent}% de desconto
+      </div>
+    </div>
+  )}
+
+  {/* BOTÕES */}
+  <div className="mt-5 flex flex-col gap-2">
+
+    {/* Agendar Agora */}
+    <div
+      role="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        setSelectedService(service);
+        setStep(2);
+      }}
+      className="w-full py-2 rounded-md bg-[#E8DCC3] text-black font-semibold hover:bg-[#f3ead6] transition text-center"
+    >
+      Agendar Agora
+    </div>
+
+    {/* Carrinho */}
+   <button
+  onClick={(e) => {
+    e.stopPropagation();
+
+addService({
+  id: crypto.randomUUID(), // id único do item do carrinho
+  service_id: service.id,  // id REAL do serviço
+  name: service.name,
+  price: service.price,
+  image_url: service.image_url ?? null,
+  duration_minutes: service.duration_minutes ?? null,
+  date: null,
+  time: null,
+  professional_id: null,
+  client_name: formData.nome,
+  client_email: formData.email,
+  client_phone: normalizePhone(formData.telefone),
+});
+
+
+toast.custom((t) => (
+  <div
+    className={`
+      flex items-center gap-4
+      bg-[#111111] border border-[#E8DCC3]/40 
+      text-[#E8DCC3]
+      px-4 py-3 rounded-xl shadow-lg
+      transition-all duration-300
+      ${t.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"}
+    `}
+  >
+    <span className="text-lg">🛒</span>
+
+    <div className="flex flex-col">
+      <span className="font-semibold">Serviço adicionado ao carrinho</span>
+      <button
+        onClick={() => {
+          router.push("/carrinho");
+          toast.dismiss(t.id);
+        }}
+        className="mt-1 text-xs underline underline-offset-4 hover:text-white"
+      >
+        Ver carrinho
+      </button>
+    </div>
+
+    <button
+      onClick={() => toast.dismiss(t.id)}
+      className="ml-2 text-[#E8DCC3]/70 hover:text-[#E8DCC3]"
+    >
+      ✕
+    </button>
+  </div>
+));
+
+  }}
+  className="w-full py-2 rounded-md border border-[#E8DCC3]/40 text-[#E8DCC3] hover:bg-[#E8DCC3]/10 transition"
+>
+  Adicionar ao Carrinho
+</button>
+
+  </div>
+</div>
                 );
               })}
             </div>
