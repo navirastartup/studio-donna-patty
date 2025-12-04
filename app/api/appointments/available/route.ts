@@ -1,10 +1,22 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 
+/* ============================================================================
+   UTILITÁRIO: retorna yyyy-mm-dd do HORÁRIO LOCAL (sem UTC!)
+============================================================================ */
+function todayLocal() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/* Converte date + "HH:mm" para Date local */
 function makeLocal(date: string, time: string) {
   const [y, m, d] = date.split("-").map(Number);
   const [hh, mm] = time.split(":").map(Number);
-  return new Date(y, m - 1, d, hh, mm);
+  return new Date(y, m - 1, d, hh, mm, 0, 0);
 }
 
 export async function POST(req: Request) {
@@ -18,19 +30,17 @@ export async function POST(req: Request) {
       );
     }
 
-    // ============================
-    // (A) BLOQUEAR DIAS PASSADOS
-    // ============================
-    const today = new Date();
-    const dateObj = new Date(date);
-    today.setHours(0, 0, 0, 0);
-    if (dateObj < today) {
+    /* ============================================================================
+       (1) VALIDAR SE O DIA É PASSADO — MAS AGORA USANDO DATA LOCAL SEM UTC
+    ============================================================================ */
+    const today = todayLocal();
+    if (date < today) {
       return NextResponse.json({ available: [], closed: true });
     }
 
-    // ============================
-    // BUSCAR HORÁRIOS DO DIA
-    // ============================
+    /* ============================================================================
+       (2) BUSCAR HORÁRIOS DA AGENDA
+    ============================================================================ */
     const weekdays = [
       "sunday",
       "monday",
@@ -42,8 +52,7 @@ export async function POST(req: Request) {
     ];
 
     const [Y, M, D] = date.split("-").map(Number);
-    const weekDay = new Date(Y, M - 1, D).getDay();
-    const weekdayName = weekdays[weekDay];
+    const weekdayName = weekdays[new Date(Y, M - 1, D).getDay()];
 
     const { data: schedule } = await supabase
       .from("schedules")
@@ -51,7 +60,7 @@ export async function POST(req: Request) {
       .eq("day_of_week", weekdayName)
       .single();
 
-    if (!schedule || schedule.start_time === "00:00:00" || schedule.end_time === "00:00:00") {
+    if (!schedule || schedule.start_time === "00:00:00") {
       return NextResponse.json({ available: [], closed: true });
     }
 
@@ -60,22 +69,20 @@ export async function POST(req: Request) {
     const breakStart = schedule.break_start_time;
     const breakEnd = schedule.break_end_time;
 
-    // ============================
-    // BUSCAR DURAÇÃO DO SERVIÇO
-    // ============================
+    /* ============================================================================
+       (3) PEGAR DURAÇÃO DO SERVIÇO
+    ============================================================================ */
     const { data: service } = await supabase
       .from("services")
       .select("duration_minutes")
       .eq("id", service_id)
       .single();
 
-    const duration = service?.duration_minutes;
-    if (!duration) return NextResponse.json({ available: [] });
+    const duration = service?.duration_minutes ?? 60;
 
-    // ============================
-    // BUSCAR AGENDAMENTOS DO DIA
-    // (SEM FILTRAR is_manual)
-    // ============================
+    /* ============================================================================
+       (4) BUSCAR AGENDAMENTOS EXISTENTES
+    ============================================================================ */
     let query = supabase
       .from("appointments")
       .select("start_time, end_time")
@@ -86,14 +93,14 @@ export async function POST(req: Request) {
 
     const { data: booked } = await query;
 
-    const events = (booked || []).map((b) => ({
-      start: new Date(b.start_time).getTime(),
-      end: new Date(b.end_time).getTime(),
+    const events = (booked || []).map((e) => ({
+      start: new Date(e.start_time).getTime(),
+      end: new Date(e.end_time).getTime(),
     }));
 
-    // ============================
-    // GERAR HORÁRIOS DO SALÃO
-    // ============================
+    /* ============================================================================
+       (5) GERAR LISTA DE HORÁRIOS BRUTOS
+    ============================================================================ */
     const startHour = parseInt(open.split(":")[0]);
     const endHour = parseInt(close.split(":")[0]);
 
@@ -102,41 +109,41 @@ export async function POST(req: Request) {
       const hh = String(h).padStart(2, "0");
       slots.push(`${hh}:00`);
 
+      // Caso específico do seu salão
       if (h === 13 && breakEnd === "13:30:00") slots.push("13:30");
     }
 
-    // ============================
-    // REMOVER HORÁRIOS DA PAUSA
-    // ============================
+    /* ============================================================================
+       (6) REMOVER HORÁRIOS NA PAUSA
+    ============================================================================ */
     let filtered = slots.filter((slot) => {
       if (!breakStart || !breakEnd) return true;
 
       const t = makeLocal(date, slot).getTime();
-      const pauseStart = makeLocal(date, breakStart).getTime();
-      const pauseEnd = makeLocal(date, breakEnd).getTime();
+      const p1 = makeLocal(date, breakStart).getTime();
+      const p2 = makeLocal(date, breakEnd).getTime();
 
-      return !(t >= pauseStart && t < pauseEnd);
+      return !(t >= p1 && t < p2);
     });
 
-    // ============================
-    // (B) BLOQUEAR HORÁRIOS PASSADOS HOJE
-    // ============================
-    const now = new Date();
-    now.setSeconds(0, 0);
-
-    const isToday =
-      date === new Date().toISOString().slice(0, 10);
+    /* ============================================================================
+       (7) BLOQUEAR HORÁRIOS PASSADOS (AGORA CORRETO!)
+    ============================================================================ */
+    const isToday = date === todayLocal();
 
     if (isToday) {
+      const now = new Date(); // horário real BR
+      const nowTs = now.getTime();
+
       filtered = filtered.filter((slot) => {
-        const slotTime = makeLocal(date, slot);
-        return slotTime.getTime() > now.getTime();
+        const slotTs = makeLocal(date, slot).getTime();
+        return slotTs > nowTs;
       });
     }
 
-    // ============================
-    // BLOQUEAR CONFLITOS
-    // ============================
+    /* ============================================================================
+       (8) REMOVER HORÁRIOS QUE DÃO CONFLITO COM AGENDAMENTOS
+    ============================================================================ */
     const available = filtered.filter((slot) => {
       const start = makeLocal(date, slot).getTime();
       const end = start + duration * 60000;
@@ -145,7 +152,6 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ available, closed: false });
-
   } catch (e: any) {
     console.log("ERRO DISPONIBILIDADE:", e);
     return NextResponse.json({ error: e.message }, { status: 500 });

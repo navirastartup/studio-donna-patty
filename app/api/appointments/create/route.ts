@@ -67,12 +67,6 @@ const end_time = `${date}T${endH}:${endM}:00`;
     // -----------------------------------------------
     // 3) CRIAR AGENDAMENTO MANUAL (is_manual = true)
     // -----------------------------------------------
-
-    console.log("📌 RECEBIDO DO FRONT:", appointment);
-    console.log("➡️ start_time final:", start_time);
-    console.log("➡️ end_time final:", end_time);
-
-
     const { data: appt, error: aErr } = await admin
       .from("appointments")
       .insert([

@@ -20,6 +20,8 @@ import {
 } from "lucide-react";
 import { ImageUpload } from "@/components/ui/image-upload";
 import { motion, AnimatePresence } from "framer-motion";
+import { Info } from "lucide-react";
+
 
 /* ============================================================
  * Tipos
@@ -38,7 +40,14 @@ interface Schedule {
 type PaymentPolicy = "none" | "deposit" | "full";
 type PaymentMode = "percent" | "fixed";
 
-type TabsKeys = "geral" | "pagamentos" | "horarios" | "seguranca" | "integracoes";
+type TabsKeys =
+  | "geral"
+  | "pagamentos"
+  | "horarios"
+  | "seguranca"
+  | "integracoes"
+  | "sobre";
+
 
 /* ============================================================
  * Constantes
@@ -270,6 +279,10 @@ export default function AdminConfiguracoesPage() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [currentPin, setCurrentPin] = useState("");
+  const [newPin, setNewPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+  const [busyUpdatePin, setBusyUpdatePin] = useState(false);
 
   // Tabs
   const [activeTab, setActiveTab] = useState<TabsKeys>("geral");
@@ -490,6 +503,46 @@ export default function AdminConfiguracoesPage() {
     }
   }
 
+async function handleUpdatePin() {
+  if (!currentPin || !newPin || !confirmPin) {
+    fail("Preencha todos os campos.");
+    return;
+  }
+
+  if (newPin !== confirmPin) {
+    fail("O novo PIN e a confirmação não coincidem.");
+    return;
+  }
+
+  setBusyUpdatePin(true);
+
+  try {
+    const res = await fetch("/api/finance/update-pin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        currentPin,
+        newPin,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) throw new Error(data.error || "Erro ao atualizar o PIN.");
+
+    info("PIN atualizado com sucesso!");
+
+    setCurrentPin("");
+    setNewPin("");
+    setConfirmPin("");
+  } catch (err: any) {
+    fail(err.message);
+  } finally {
+    setBusyUpdatePin(false);
+  }
+}
+
+
   /* ---------------------------------------------
    * Ações rápidas — horários
    * ------------------------------------------- */
@@ -679,6 +732,8 @@ if (!qr) {
           { key: "horarios", label: "Horários", icon: CalendarDays },
           { key: "seguranca", label: "Segurança", icon: KeyRound },
           { key: "integracoes", label: "Integrações", icon: Link2 },
+          { key: "sobre", label: "Sobre", icon: Info },
+
         ].map(({ key, label, icon: Icon }) => (
           <button
             key={key}
@@ -737,6 +792,35 @@ if (!qr) {
             </div>
           </form>
         )}
+
+{/* ====================================== */}
+{/*            ABA SOBRE O SISTEMA        */}
+{/* ====================================== */}
+
+{activeTab === "sobre" && (
+  <div className="space-y-6">
+
+    <div className="rounded-xl border border-gray-800 bg-gray-900/60 backdrop-blur-lg p-8">
+
+      <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-3">
+
+        Desenvolvido por: <span className="font-medium text-[#FF8C00]">Navira</span>
+      </h3>
+
+      {/* INFO DO SISTEMA */}
+      <div className="space-y-2 text-gray-300 text-sm">
+        <p><strong>Versão do sistema:</strong> 1.0.7</p>
+        <p><strong>Última atualização:</strong> 04/12/2025</p>
+      </div>
+
+    </div>
+            <div className="pt-2 text-sm text-gray-500">
+          © {new Date().getFullYear()} NAVIRA — Todos os direitos reservados.
+        </div>
+
+
+  </div>
+)}
 
         {/* ======= PAGAMENTOS ======= */}
         {activeTab === "pagamentos" && (
@@ -1045,118 +1129,233 @@ if (!qr) {
           </form>
         )}
 
-        {/* ======= SEGURANÇA ======= */}
-        {activeTab === "seguranca" && (
-          <form onSubmit={handleChangePassword} className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div>
-              <label className="block text-sm text-gray-300 mb-1">Senha Atual</label>
-              <input
-                type="password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 text-white rounded-md px-4 py-2"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-300 mb-1">Nova Senha</label>
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 text-white rounded-md px-4 py-2"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-300 mb-1">Confirmar Nova Senha</label>
-              <input
-                type="password"
-                value={confirmNewPassword}
-                onChange={(e) => setConfirmNewPassword(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 text-white rounded-md px-4 py-2"
-                required
-              />
-            </div>
-            <div className="md:col-span-3 flex justify-end">
-              <button
-                type="submit"
-                disabled={busyChangePassword}
-                className="bg-[#D6C6AA] text-black font-medium px-6 py-2 rounded-lg hover:bg-[#e8d8b4] transition-colors inline-flex items-center gap-2 disabled:opacity-60"
-              >
-                {busyChangePassword && <Loader2 className="w-4 h-4 animate-spin" />}
-                Mudar Senha
-              </button>
-            </div>
-          </form>
-        )}
+{/* =============================== */}
+{/*          ABA SEGURANÇA          */}
+{/* =============================== */}
+{activeTab === "seguranca" && (
+  <div className="space-y-12">
 
-        {/* ======= INTEGRAÇÕES ======= */}
-        {activeTab === "integracoes" && (
-          <div className="rounded-xl border border-gray-800 bg-gray-900/60 backdrop-blur-lg p-8">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <QrCode className="w-6 h-6 text-[#D6C6AA]" />
-                <h3 className="text-lg font-semibold text-white">Integração WhatsApp</h3>
-              </div>
-              <button
-                onClick={refreshWhatsQR}
-                disabled={busyQR}
-                className="px-3 py-2 rounded-lg border border-gray-700 text-gray-200 hover:text:white hover:border-[#D6C6AA] transition-all inline-flex items-center gap-2"
-              >
-                {busyQR ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="w-4 h-4" />
-                )}
-                Atualizar
-              </button>
-            </div>
+    {/* ============================ */}
+    {/*   1) ALTERAR SENHA DO PAINEL */}
+    {/* ============================ */}
+    <div>
+      <h3 className="text-lg font-semibold text-[#D6C6AA] mb-4">
+        Alterar Senha do Painel
+      </h3>
 
-            {/* Estado: Conectado */}
-            {isConnected && (
-              <div className="flex flex-col items-center text-center py-8">
-                <CheckCircle className="w-10 h-10 text-green-400 mb-3" />
-                <p className="text-white font-medium text-lg mb-1">Você está conectado!</p>
-                <p className="text-gray-400 text-sm mb-5">
-                  Número vinculado: {connectedNumber || "(desconhecido)"}
-                </p>
-                <button
-                  onClick={disconnectWhatsApp}
-                  className="px-4 py-2 text-sm rounded-md border border-red-600 text-red-300 hover:bg-red-900/20 transition-all"
-                >
-                  Desconectar
-                </button>
-              </div>
-            )}
+      <form
+        onSubmit={handleChangePassword}
+        className="grid grid-cols-1 md:grid-cols-3 gap-6"
+      >
+        {/* Senha atual */}
+        <div>
+          <label className="block text-sm text-gray-300 mb-1">Senha Atual</label>
+          <input
+            type="password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            className="w-full bg-gray-800 border border-gray-700 text-white rounded-md px-4 py-2"
+            required
+            autoComplete="new-password"
+          />
+        </div>
 
-            {/* Estado: QR disponível */}
-            {!isConnected && qrDataURL && (
-              <div className="flex flex-col items-center justify-center py-8">
-                <img src={qrDataURL} alt="QR WhatsApp" className="w-52 h-52 rounded-lg" />
-                <p className="text-sm text-gray-400 mt-3">
-                  Escaneie o QR pelo seu WhatsApp → Aparelhos Conectados
-                </p>
-              </div>
-            )}
+        {/* Nova senha */}
+        <div>
+          <label className="block text-sm text-gray-300 mb-1">Nova Senha</label>
+          <input
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            className="w-full bg-gray-800 border border-gray-700 text-white rounded-md px-4 py-2"
+            required
+            autoComplete="new-password"
+          />
+        </div>
 
-            {/* Estado: Sem QR */}
-            {!isConnected && !qrDataURL && (
-              <div className="flex flex-col items-center justify-center py-8 text-center text-gray-400">
-                <XCircle className="w-8 h-8 text-red-400 mb-3" />
-                <p className="text-sm mb-4">
-                  QR ainda não disponível. Inicie o bot do WhatsApp para gerar o QR.
-                </p>
-                <button
-                  onClick={refreshWhatsQR}
-                  className="px-4 py-2 text-sm rounded-md border border-gray-700 hover:border-[#D6C6AA] hover:text-white transition-all"
-                >
-                  Gerar QR
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+        {/* Confirmar nova senha */}
+        <div>
+          <label className="block text-sm text-gray-300 mb-1">
+            Confirmar Nova Senha
+          </label>
+          <input
+            type="password"
+            value={confirmNewPassword}
+            onChange={(e) => setConfirmNewPassword(e.target.value)}
+            className="w-full bg-gray-800 border border-gray-700 text-white rounded-md px-4 py-2"
+            required
+            autoComplete="new-password"
+          />
+        </div>
+
+        {/* Botão */}
+        <div className="md:col-span-3 flex justify-end">
+          <button
+            type="submit"
+            disabled={busyChangePassword}
+            className="bg-[#D6C6AA] text-black font-medium px-6 py-2 rounded-lg hover:bg-[#e8d8b4] transition-colors inline-flex items-center gap-2 disabled:opacity-60"
+          >
+            {busyChangePassword && <Loader2 className="w-4 h-4 animate-spin" />}
+            Mudar Senha
+          </button>
+        </div>
+      </form>
+    </div>
+
+    {/* ============================ */}
+    {/*   2) ALTERAR PIN FINANCEIRO  */}
+    {/* ============================ */}
+    <div>
+      <h3 className="text-lg font-semibold text-[#D6C6AA] mb-4">
+        Alterar PIN do Financeiro
+      </h3>
+
+      {/* Anti-autofill invisível */}
+      <input type="text" name="fake-user" autoComplete="off" style={{ display: "none" }} />
+      <input type="password" name="fake-pass" autoComplete="new-password" style={{ display: "none" }} />
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+        {/* PIN Atual */}
+        <div>
+          <label className="block text-sm text-gray-300 mb-1">PIN Atual</label>
+          <input
+            type="password"
+            inputMode="numeric"
+            pattern="\d*"
+            name="pin_current"
+            autoComplete="new-password"
+            onFocus={(e) => e.target.setAttribute("autocomplete", "new-password")}
+            value={currentPin}
+            onChange={(e) => setCurrentPin(e.target.value)}
+            className="w-full bg-gray-800 border border-gray-700 text-white rounded-md px-4 py-2"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck="false"
+          />
+        </div>
+
+        {/* Novo PIN */}
+        <div>
+          <label className="block text-sm text-gray-300 mb-1">Novo PIN</label>
+          <input
+            type="password"
+            inputMode="numeric"
+            pattern="\d*"
+            name="pin_new"
+            autoComplete="new-password"
+            onFocus={(e) => e.target.setAttribute("autocomplete", "new-password")}
+            value={newPin}
+            onChange={(e) => setNewPin(e.target.value)}
+            className="w-full bg-gray-800 border border-gray-700 text-white rounded-md px-4 py-2"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck="false"
+          />
+        </div>
+
+        {/* Confirmar PIN */}
+        <div>
+          <label className="block text-sm text-gray-300 mb-1">Confirmar Novo PIN</label>
+          <input
+            type="password"
+            inputMode="numeric"
+            pattern="\d*"
+            name="pin_confirm"
+            autoComplete="new-password"
+            onFocus={(e) => e.target.setAttribute("autocomplete", "new-password")}
+            value={confirmPin}
+            onChange={(e) => setConfirmPin(e.target.value)}
+            className="w-full bg-gray-800 border border-gray-700 text-white rounded-md px-4 py-2"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck="false"
+          />
+        </div>
+      </div>
+
+      {/* Botão atualizar PIN */}
+      <div className="flex justify-end mt-4">
+        <button
+          onClick={handleUpdatePin}
+          disabled={busyUpdatePin}
+          className="bg-[#D6C6AA] text-black font-medium px-6 py-2 rounded-lg hover:bg-[#e8d8b4] transition-colors inline-flex items-center gap-2 disabled:opacity-60"
+        >
+          {busyUpdatePin && <Loader2 className="w-4 h-4 animate-spin" />}
+          Atualizar PIN
+        </button>
+      </div>
+    </div>
+
+  </div>
+)}
+
+
+
+{/*          ABA INTEGRAÇÕES        */}
+
+{activeTab === "integracoes" && (
+  <div className="rounded-xl border border-gray-800 bg-gray-900/60 backdrop-blur-lg p-8">
+
+    <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center gap-3">
+        <QrCode className="w-6 h-6 text-[#D6C6AA]" />
+        <h3 className="text-lg font-semibold text-white">Integração WhatsApp</h3>
+      </div>
+
+      <button
+        onClick={refreshWhatsQR}
+        disabled={busyQR}
+        className="px-3 py-2 rounded-lg border border-gray-700 text-gray-200 hover:text:white hover:border-[#D6C6AA] transition-all inline-flex items-center gap-2"
+      >
+        {busyQR ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+        Atualizar
+      </button>
+    </div>
+
+    {/* Conectado */}
+    {isConnected && (
+      <div className="flex flex-col items-center text-center py-8">
+        <CheckCircle className="w-10 h-10 text-green-400 mb-3" />
+        <p className="text-white font-medium text-lg mb-1">Você está conectado!</p>
+        <p className="text-gray-400 text-sm mb-5">
+          Número vinculado: {connectedNumber || "(desconhecido)"}
+        </p>
+        <button
+          onClick={disconnectWhatsApp}
+          className="px-4 py-2 text-sm rounded-md border border-red-600 text-red-300 hover:bg-red-900/20 transition-all"
+        >
+          Desconectar
+        </button>
+      </div>
+    )}
+
+    {/* QR disponível */}
+    {!isConnected && qrDataURL && (
+      <div className="flex flex-col items-center justify-center py-8">
+        <img src={qrDataURL} alt="QR WhatsApp" className="w-52 h-52 rounded-lg" />
+        <p className="text-sm text-gray-400 mt-3">
+          Escaneie pelo WhatsApp → Aparelhos Conectados
+        </p>
+      </div>
+    )}
+
+    {/* Sem QR */}
+    {!isConnected && !qrDataURL && (
+      <div className="flex flex-col items-center justify-center py-8 text-center text-gray-400">
+        <XCircle className="w-8 h-8 text-red-400 mb-3" />
+        <p className="text-sm mb-4">QR ainda não disponível. Inicie o bot.</p>
+        <button
+          onClick={refreshWhatsQR}
+          className="px-4 py-2 text-sm rounded-md border border-gray-700 hover:border-[#D6C6AA] hover:text-white transition-all"
+        >
+          Gerar QR
+        </button>
+      </div>
+    )}
+  </div>
+)}
+
       </div>
 
       {/* Modal: Limpar horários */}

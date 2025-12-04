@@ -2,46 +2,42 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 const url = process.env.SUPABASE_URL!;
-const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY!; // NUNCA expor no client
+const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const admin = createClient(url, serviceRole);
 
 export async function POST(req: Request) {
   try {
-    const { id, status, payment_status } = await req.json();
+    const { id, status, payment_status, oldDate, newDate, clientName } =
+      await req.json();
 
     if (!id) {
-      return NextResponse.json({ error: "ID ausente" }, { status: 400 });
+      return NextResponse.json(
+        { error: "ID ausente" },
+        { status: 400 }
+      );
     }
 
-    // mapeia status do front se vier em inglês (opcional)
-    const mapStatus = (s?: string) => {
-      if (!s) return undefined;
-      const m: Record<string, string> = {
-        pending: "pendente",
-        confirmed: "confirmado",
-        cancelled: "cancelado",
-        completed: "concluido",
-      };
-      return m[s] || s;
+    // Mapa status PT-BR
+    const mapStatus: Record<string, string> = {
+      pending: "pendente",
+      confirmed: "confirmado",
+      cancelled: "cancelado",
+      completed: "concluido",
+      rescheduled: "reagendado",
     };
 
-    const mapPay = (s?: string) => {
-      if (!s) return undefined;
-      const m: Record<string, string> = {
-        pending: "pendente",
-        paid: "pago",
-        cancelled: "cancelado",
-        refunded: "reembolsado",
-      };
-      return m[s] || s;
+    const mapPay: Record<string, string> = {
+      pending: "pendente",
+      paid: "pago",
+      failed: "falhou",
     };
 
     const payload: any = {};
-    const sPT = mapStatus(status);
-    const pPT = mapPay(payment_status);
-    if (sPT) payload.status = sPT;
-    if (pPT) payload.payment_status = pPT;
 
+    if (status) payload.status = mapStatus[status] || status;
+    if (payment_status) payload.payment_status = mapPay[payment_status] || payment_status;
+
+    // Atualiza agendamento
     const { error } = await admin
       .from("appointments")
       .update(payload)
@@ -49,10 +45,18 @@ export async function POST(req: Request) {
 
     if (error) throw error;
 
-    // ⚠️ o trigger no banco já cria o payment se payment_status='pago'
+    // 🔔 Criar notificação de reagendamento no admin
+    if (status === "rescheduled" && clientName && oldDate && newDate) {
+      await admin.from("admin_notifications").insert({
+        type: "reschedule",
+        message: `🔁 ${clientName} reagendou (${oldDate} → ${newDate})`,
+        created_at: new Date().toISOString(),
+      });
+    }
+
     return NextResponse.json({ ok: true });
   } catch (err: any) {
-    console.error("update appointment error:", err);
+    console.error("Erro atualização:", err);
     return NextResponse.json(
       { error: err.message || "Erro interno" },
       { status: 500 }

@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@supabase/supabase-js";
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export async function POST(req: Request) {
   const { pin } = await req.json();
@@ -8,12 +13,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "PIN ausente" }, { status: 400 });
   }
 
-  // pega o PIN gravado no settings
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("settings")
     .select("value")
     .eq("key", "finance_pin")
     .single();
+
+  console.log("DB ERROR:", error);
+  console.log("DB DATA:", data);
 
   if (error || !data) {
     return NextResponse.json({ ok: false, error: "PIN não configurado" }, { status: 500 });
@@ -21,9 +28,5 @@ export async function POST(req: Request) {
 
   const storedPin = data.value;
 
-  if (pin === storedPin) {
-    return NextResponse.json({ ok: true });
-  }
-
-  return NextResponse.json({ ok: false });
+  return NextResponse.json({ ok: pin === storedPin });
 }

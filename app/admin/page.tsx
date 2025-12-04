@@ -286,7 +286,7 @@ export default function AdminDashboardPage() {
   }
 
   return (
-    <main className="p-6 space-y-8">
+    <main className="p-6 bg-[#0A0F14] min-h-screen">
     {/* Header */}
     <div className="flex items-center justify-between">
       <div>
