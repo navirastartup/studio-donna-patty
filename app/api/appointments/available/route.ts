@@ -18,6 +18,19 @@ export async function POST(req: Request) {
       );
     }
 
+    // ============================
+    // (A) BLOQUEAR DIAS PASSADOS
+    // ============================
+    const today = new Date();
+    const dateObj = new Date(date);
+    today.setHours(0, 0, 0, 0);
+    if (dateObj < today) {
+      return NextResponse.json({ available: [], closed: true });
+    }
+
+    // ============================
+    // BUSCAR HORÁRIOS DO DIA
+    // ============================
     const weekdays = [
       "sunday",
       "monday",
@@ -32,14 +45,12 @@ export async function POST(req: Request) {
     const weekDay = new Date(Y, M - 1, D).getDay();
     const weekdayName = weekdays[weekDay];
 
-    // 1. Buscar horários cadastrados
     const { data: schedule } = await supabase
       .from("schedules")
       .select("*")
       .eq("day_of_week", weekdayName)
       .single();
 
-    // DIA FECHADO
     if (!schedule || schedule.start_time === "00:00:00" || schedule.end_time === "00:00:00") {
       return NextResponse.json({ available: [], closed: true });
     }
@@ -49,7 +60,9 @@ export async function POST(req: Request) {
     const breakStart = schedule.break_start_time;
     const breakEnd = schedule.break_end_time;
 
-    // 2. Buscar duração
+    // ============================
+    // BUSCAR DURAÇÃO DO SERVIÇO
+    // ============================
     const { data: service } = await supabase
       .from("services")
       .select("duration_minutes")
@@ -59,12 +72,13 @@ export async function POST(req: Request) {
     const duration = service?.duration_minutes;
     if (!duration) return NextResponse.json({ available: [] });
 
-    // 3. Buscar agendamentos do dia
-    // ⬇️⬇️⬇️ **AGORA IGNORANDO MANUAIS** ⬇️⬇️⬇️
+    // ============================
+    // BUSCAR AGENDAMENTOS DO DIA
+    // (SEM FILTRAR is_manual)
+    // ============================
     let query = supabase
       .from("appointments")
-      .select("start_time, end_time, is_manual")
-      .eq("is_manual", false)                  // 🟩 IGNORA MANUAL
+      .select("start_time, end_time")
       .gte("start_time", `${date}T00:00:00`)
       .lte("start_time", `${date}T23:59:59`);
 
@@ -77,24 +91,24 @@ export async function POST(req: Request) {
       end: new Date(b.end_time).getTime(),
     }));
 
-    // 4. Gerar horários de acordo com o banco (sem 30/30 artificiais)
+    // ============================
+    // GERAR HORÁRIOS DO SALÃO
+    // ============================
     const startHour = parseInt(open.split(":")[0]);
     const endHour = parseInt(close.split(":")[0]);
 
     const slots: string[] = [];
     for (let h = startHour; h <= endHour; h++) {
       const hh = String(h).padStart(2, "0");
-      const full = `${hh}:00`;
-      slots.push(full);
+      slots.push(`${hh}:00`);
 
-      // Adicionar 13:30 SE NÃO ESTIVER NA PAUSA
-      if (h === 13 && breakEnd === "13:30:00") {
-        slots.push("13:30");
-      }
+      if (h === 13 && breakEnd === "13:30:00") slots.push("13:30");
     }
 
-    // Remover horários dentro da pausa
-    const filtered = slots.filter((slot) => {
+    // ============================
+    // REMOVER HORÁRIOS DA PAUSA
+    // ============================
+    let filtered = slots.filter((slot) => {
       if (!breakStart || !breakEnd) return true;
 
       const t = makeLocal(date, slot).getTime();
@@ -104,7 +118,25 @@ export async function POST(req: Request) {
       return !(t >= pauseStart && t < pauseEnd);
     });
 
-    // 5. Verificar conflitos
+    // ============================
+    // (B) BLOQUEAR HORÁRIOS PASSADOS HOJE
+    // ============================
+    const now = new Date();
+    now.setSeconds(0, 0);
+
+    const isToday =
+      date === new Date().toISOString().slice(0, 10);
+
+    if (isToday) {
+      filtered = filtered.filter((slot) => {
+        const slotTime = makeLocal(date, slot);
+        return slotTime.getTime() > now.getTime();
+      });
+    }
+
+    // ============================
+    // BLOQUEAR CONFLITOS
+    // ============================
     const available = filtered.filter((slot) => {
       const start = makeLocal(date, slot).getTime();
       const end = start + duration * 60000;

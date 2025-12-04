@@ -677,233 +677,237 @@ toast.custom((t) => (
           </>
         )}
 
-        {/* STEP 3 — Calendário + Horários */}
-        {step === 3 && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+{/* STEP 3 — Calendário + Horários */}
+{step === 3 && (
+  <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+    
+    {/* Calendário */}
+    <div className="bg-[#111] border border-[#2a2a2a] rounded-2xl p-6 shadow-lg">
+      <h2 className="text-xl font-semibold text-[#E8DCC3] mb-6">
+        Selecione a Data
+      </h2>
 
-            {/* Calendário */}
-            <div className="bg-[#111] border border-[#2a2a2a] rounded-2xl p-6 shadow-lg">
-              <h2 className="text-xl font-semibold text-[#E8DCC3] mb-6">
-                Selecione a Data
-              </h2>
+      {/* Navegação mês */}
+      <div className="flex items-center justify-between text-[#E8DCC3] mb-4">
+        <button
+          onClick={() =>
+            setCurrentMonth(
+              new Date(
+                currentMonth.getFullYear(),
+                currentMonth.getMonth() - 1,
+                1
+              )
+            )
+          }
+        >
+          <ChevronLeft />
+        </button>
 
-              <div className="flex items-center justify-between text-[#E8DCC3] mb-4">
-                <button
-                  onClick={() =>
-                    setCurrentMonth(
-                      new Date(
-                        currentMonth.getFullYear(),
-                        currentMonth.getMonth() - 1,
-                        1
-                      )
-                    )
-                  }
-                >
-                  <ChevronLeft />
-                </button>
+        <span className="font-medium tracking-wide">
+          {currentMonth.toLocaleDateString("pt-BR", {
+            month: "long",
+            year: "numeric",
+          })}
+        </span>
 
-                <span className="font-medium tracking-wide">
-                  {currentMonth.toLocaleDateString("pt-BR", {
-                    month: "long",
-                    year: "numeric",
-                  })}
-                </span>
+        <button
+          onClick={() =>
+            setCurrentMonth(
+              new Date(
+                currentMonth.getFullYear(),
+                currentMonth.getMonth() + 1,
+                1
+              )
+            )
+          }
+        >
+          <ChevronRight />
+        </button>
+      </div>
 
-                <button
-                  onClick={() =>
-                    setCurrentMonth(
-                      new Date(
-                        currentMonth.getFullYear(),
-                        currentMonth.getMonth() + 1,
-                        1
-                      )
-                    )
-                  }
-                >
-                  <ChevronRight />
-                </button>
-              </div>
+      {/* Cabeçalho dos dias da semana */}
+      <div className="grid grid-cols-7 gap-1 text-center text-xs text-gray-400 mb-1">
+        {["dom", "seg", "ter", "qua", "qui", "sex", "sab"].map((d) => (
+          <span key={d}>{d}</span>
+        ))}
+      </div>
 
-              <div className="grid grid-cols-7 gap-1 text-center text-xs text-gray-400 mb-1">
-                {["dom", "seg", "ter", "qua", "qui", "sex", "sab"].map((d) => (
-                  <span key={d}>{d}</span>
-                ))}
-              </div>
+      {/* Dias do mês */}
+      <div className="grid grid-cols-7 gap-2 text-center">
+        {Array.from({ length: firstDayIndex }).map((_, i) => (
+          <span key={i} />
+        ))}
 
-              <div className="grid grid-cols-7 gap-2 text-center">
-                {Array.from({ length: firstDayIndex }).map((_, i) => (
-                  <span key={i} />
-                ))}
+        {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
 
-                {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(
-                  (day) => {
-                    const selected = selectedDate === day;
+          const thisDay = new Date(
+            currentMonth.getFullYear(),
+            currentMonth.getMonth(),
+            day
+          );
 
-                    return (
-                      <button
-                        key={day}
-                        onClick={() => setSelectedDate(day)}
-                        className={`
-                          p-2 rounded-lg text-sm transition
-                          ${
-                            selected
-                              ? "bg-[#E8DCC3] text-black shadow-md"
-                              : "text-gray-300 hover:bg-[#272727]"
-                          }
-                        `}
-                      >
-                        {day}
-                      </button>
-                    );
-                  }
-                )}
-              </div>
+          const isPast = thisDay < today;
+          const selected = selectedDate === day;
 
-              <h3 className="mt-6 text-[#E8DCC3] font-medium text-sm">
-                Horário
-              </h3>
+          return (
+            <button
+              key={day}
+              disabled={isPast}
+              onClick={() => !isPast && setSelectedDate(day)}
+              className={`
+                p-2 rounded-lg text-sm transition
+                ${
+                  isPast
+                    ? "opacity-30 cursor-not-allowed text-gray-600"
+                    : selected
+                      ? "bg-[#E8DCC3] text-black shadow-md"
+                      : "text-gray-300 hover:bg-[#272727]"
+                }
+              `}
+            >
+              {day}
+            </button>
+          );
+        })}
+      </div>
 
-              <div className="flex flex-wrap gap-2 mt-3">
-                {closed ? (
-                  <div className="flex items-center gap-2 text-red-400 font-semibold text-sm">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff4f4f" strokeWidth="2">
-                      <circle cx="12" cy="12" r="10"></circle>
-                      <line x1="15" y1="9" x2="9" y2="15"></line>
-                      <line x1="9" y1="9" x2="15" y2="15"></line>
-                    </svg>
-                    Fechado neste dia
-                  </div>
-                ) : timeSlots.length > 0 ? (
-                  timeSlots.map((t) => (
-                    <button
-                      key={t}
-                      onClick={() => setSelectedTime(t)}
-                      className={`
-                        px-4 py-2 rounded-full text-sm transition
-                        ${
-                          selectedTime === t
-                            ? "bg-[#E8DCC3] text-black shadow-lg"
-                            : "bg-[#1d1d1d] text-gray-300 hover:bg-[#2a2a2a]"
-                        }
-                      `}
-                    >
-                      {t}
-                    </button>
-                  ))
-                ) : (
-                  <p className="text-gray-500 text-sm mt-2">
-                    Nenhum horário disponível
-                  </p>
-                )}
-              </div>
-            </div>
+      <h3 className="mt-6 text-[#E8DCC3] font-medium text-sm">
+        Horário
+      </h3>
 
-            {/* Detalhes */}
-            <div className="bg-[#111] border border-[#2a2a2a] rounded-2xl p-6 shadow-lg">
-              <h4 className="text-xl font-semibold text-[#E8DCC3] mb-4">
-                Detalhes do Agendamento
-              </h4>
+      {/* HORÁRIOS */}
+      <div className="flex flex-wrap gap-2 mt-3">
 
-              <div className="space-y-2 text-sm text-gray-300">
-
-                {selectedService && (
-                  <p>
-                    <span className="text-gray-400">Serviço:</span>{" "}
-                    <span className="text-white">
-                      {selectedService.name}
-                    </span>
-                  </p>
-                )}
-
-                {selectedProfessional && (
-                  <p>
-                    <span className="text-gray-400">Profissional:</span>{" "}
-                    <span className="text-white">
-                      {selectedProfessional.name}
-                    </span>
-                  </p>
-                )}
-
-                {selectedDate && selectedTime ? (
-                  <p>
-                    <span className="text-gray-400">Data e Hora:</span>{" "}
-                    <span className="text-white">
-                      {selectedDate} de{" "}
-                      {currentMonth.toLocaleDateString("pt-BR", {
-                        month: "long",
-                      })}{" "}
-                      às {selectedTime}
-                    </span>
-                  </p>
-                ) : (
-                  <p className="text-gray-500">
-                    Selecione data e horário
-                  </p>
-                )}
-
-                {selectedService && (
-                  <>
-                    <p>
-                      <span className="text-gray-400">
-                        Valor do serviço:
-                      </span>{" "}
-                      <span className="text-white">
-                        R$ {formatCurrency(Number(selectedService.price ?? 0))}
-                      </span>
-                    </p>
-
-                    {selectedService.discount_percent &&
-                      selectedService.discount_percent > 0 && (
-                        <p className="text-xs text-gray-400">
-                          Com desconto: R$ {formatCurrency(
-                            applyDiscount(
-                              Number(selectedService.price ?? 0),
-                              selectedService.discount_percent
-                            )
-                          )}{" "}
-                          ({selectedService.discount_percent}% off)
-                        </p>
-                      )}
-                  </>
-                )}
-
-                {selectedService && paymentPolicy !== "none" && (
-                  <p className="text-lg mt-2">
-                    <span className="text-gray-400">
-                      A pagar agora:
-                    </span>{" "}
-                    <span className="text-[#D6C6AA] font-semibold">
-                      R$ {formatCurrency(amountDue)}
-                    </span>
-                  </p>
-                )}
-              </div>
-
-              <div className="flex justify-between mt-8">
-                <button
-                  onClick={() => setStep(2)}
-                  className="text-gray-400 hover:text-[#D6C6AA] transition-colors flex items-center gap-2"
-                >
-                  <ChevronLeft className="w-5 h-5" /> Voltar
-                </button>
-<button
-  onClick={() => setStep(4)}
-  disabled={!selectedDate || !selectedTime}
-  className="
-    bg-[#E8DCC3] text-black font-semibold 
-    px-5 py-2 rounded-xl 
-    hover:bg-[#f3ead6] transition
-    disabled:opacity-40
-    text-sm
-    sm:text-base
-  "
->
-  Continuar <ChevronRight className="w-5 h-5 inline-block ml-1" />
-</button>
-              </div>
-            </div>
+        {closed ? (
+          /* DIA FECHADO (somente se a API disser closed=true) */
+          <div className="flex items-center gap-2 text-red-400 font-semibold text-sm">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff4f4f" strokeWidth="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="15" y1="9" x2="9" y2="15"></line>
+              <line x1="9" y1="9" x2="15" y2="15"></line>
+            </svg>
+            Fechado
           </div>
+
+        ) : (
+          (() => {
+            const now = new Date();
+
+            const isToday =
+              selectedDate &&
+              currentMonth.getFullYear() === now.getFullYear() &&
+              currentMonth.getMonth() === now.getMonth() &&
+              selectedDate === now.getDate();
+
+            const validSlots = isToday
+              ? timeSlots.filter((t) => {
+                  const [hh, mm] = t.split(":").map(Number);
+                  const slotDate = new Date(
+                    now.getFullYear(),
+                    now.getMonth(),
+                    now.getDate(),
+                    hh,
+                    mm
+                  );
+                  return slotDate.getTime() > now.getTime();
+                })
+              : timeSlots;
+
+            if (validSlots.length === 0) {
+              return (
+                <p className="text-gray-500 text-sm mt-2">
+                  Nenhum horário disponível
+                </p>
+              );
+            }
+
+            return validSlots.map((t) => (
+              <button
+                key={t}
+                onClick={() => setSelectedTime(t)}
+                className={`
+                  px-4 py-2 rounded-full text-sm transition
+                  ${
+                    selectedTime === t
+                      ? "bg-[#E8DCC3] text-black shadow-lg"
+                      : "bg-[#1d1d1d] text-gray-300 hover:bg-[#2a2a2a]"
+                  }
+                `}
+              >
+                {t}
+              </button>
+            ));
+          })()
         )}
+
+      </div>
+    </div>
+
+    {/* Detalhes (mantém o seu mesmo depois) */}
+
+    <div className="bg-[#111] border border-[#2a2a2a] rounded-2xl p-6 shadow-lg">
+      <h4 className="text-xl font-semibold text-[#E8DCC3] mb-4">
+        Detalhes do Agendamento
+      </h4>
+
+      <div className="space-y-2 text-sm text-gray-300">
+        {selectedService && (
+          <p>
+            <span className="text-gray-400">Serviço:</span>{" "}
+            <span className="text-white">{selectedService.name}</span>
+          </p>
+        )}
+
+        {selectedProfessional && (
+          <p>
+            <span className="text-gray-400">Profissional:</span>{" "}
+            <span className="text-white">{selectedProfessional.name}</span>
+          </p>
+        )}
+
+        {selectedDate && selectedTime ? (
+          <p>
+            <span className="text-gray-400">Data e Hora:</span>{" "}
+            <span className="text-white">
+              {selectedDate} de{" "}
+              {currentMonth.toLocaleDateString("pt-BR", { month: "long" })} às{" "}
+              {selectedTime}
+            </span>
+          </p>
+        ) : (
+          <p className="text-gray-500">Selecione data e horário</p>
+        )}
+      </div>
+
+      <div className="flex justify-between mt-8">
+        <button
+          onClick={() => setStep(2)}
+          className="text-gray-400 hover:text-[#D6C6AA] transition-colors flex items-center gap-2"
+        >
+          <ChevronLeft className="w-5 h-5" /> Voltar
+        </button>
+
+        <button
+          onClick={() => setStep(4)}
+          disabled={!selectedDate || !selectedTime}
+          className="
+            bg-[#E8DCC3] text-black font-semibold 
+            px-5 py-2 rounded-xl 
+            hover:bg-[#f3ead6] transition
+            disabled:opacity-40
+            text-sm
+            sm:text-base
+          "
+        >
+          Continuar <ChevronRight className="w-5 h-5 inline-block ml-1" />
+        </button>
+      </div>
+    </div>
+
+  </div>
+)}
 
         {/* STEP 4 — Dados Cliente */}
         {step === 4 && (

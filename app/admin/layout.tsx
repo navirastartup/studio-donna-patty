@@ -195,8 +195,16 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
  * ========================================================= */
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+
+  // 🔐 Reseta o PIN quando trocar de rota
+  useEffect(() => {
+    if (pathname !== "/admin/financeiro") {
+      sessionStorage.removeItem("finance_unlock");
+    }
+  }, [pathname]);
 
   useEffect(() => {
     async function checkSession() {
@@ -224,11 +232,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (!session) return null;
 
   return (
-<NotificationsProvider>
-  <LowStockProvider>
-    <Toaster richColors position="top-center" offset={20} />
-    <LayoutContent>{children}</LayoutContent>
-  </LowStockProvider>
-</NotificationsProvider>
+    <NotificationsProvider>
+      <LowStockProvider>
+        <Toaster richColors position="top-center" offset={20} />
+        <LayoutContent>{children}</LayoutContent>
+      </LowStockProvider>
+    </NotificationsProvider>
   );
 }
+

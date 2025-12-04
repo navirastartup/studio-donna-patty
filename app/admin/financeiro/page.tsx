@@ -21,6 +21,10 @@ import autoTable from "jspdf-autotable";
 import PaymentDetailsModal from "@/components/modals/PaymentDetailsModal";
 import type { RowUI } from "@/src/types/RowUI";
 
+
+
+
+
 /* ============================================================
  * Tipos
  * ============================================================ */
@@ -205,6 +209,36 @@ function Avatar({
 
 export default function AdminFinanceiroPage() {
 
+    // BLOQUEIO POR PIN ------------------------------
+  const [locked, setLocked] = useState(true);
+  const [pinInput, setPinInput] = useState("");
+  const [pinError, setPinError] = useState("");
+
+  useEffect(() => {
+    const unlocked = sessionStorage.getItem("finance_unlock");
+    if (unlocked === "yes") setLocked(false);
+  }, []);
+
+  async function validatePin() {
+    setPinError("");
+
+    const res = await fetch("/api/finance/validate-pin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pin: pinInput }),
+    });
+
+    const data = await res.json();
+
+    if (data.ok) {
+      sessionStorage.setItem("finance_unlock", "yes");
+      setLocked(false);
+    } else {
+      setPinError("PIN incorreto!");
+    }
+  }
+
+
   // modal detalhes de pagamentos
   const [selectedPayment, setSelectedPayment] = useState<any>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
@@ -230,7 +264,7 @@ export default function AdminFinanceiroPage() {
   const [paymentForm, setPaymentForm] = useState({
     client_id: "",
     professional_id: "",
-    service_id: "",
+    service_id:"",
     method: "",
     amount: "",
     appointment_id: "",
@@ -768,6 +802,43 @@ const handleRefundPayment = async (paymentId: string) => {
 
   if (loading) return <p className="text-[#D6C6AA] p-6">Carregando financeiro...</p>;
   if (error) return <p className="text-red-500 p-6">Erro: {error}</p>;
+
+    // 🔐 MODAL DE PIN – BLOQUEIA A PÁGINA
+  if (locked) {
+    return (
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50">
+        <div className="bg-[#111] border border-[#2a2a2a] rounded-2xl px-8 py-6 w-[360px] shadow-xl">
+          <h2 className="text-center text-[#E8DCC3] text-2xl font-semibold mb-6">
+            Acesso Restrito
+          </h2>
+
+          <p className="text-gray-300 text-center mb-4">
+            Digite o PIN para acessar o Financeiro
+          </p>
+
+          <input
+            type="password"
+            maxLength={6}
+            value={pinInput}
+            onChange={(e) => setPinInput(e.target.value)}
+            className="w-full text-center text-2xl tracking-widest px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white"
+            placeholder="•••••"
+          />
+
+          {pinError && (
+            <p className="text-red-400 text-center mt-2">{pinError}</p>
+          )}
+
+          <button
+            onClick={validatePin}
+            className="w-full mt-5 py-3 bg-[#E8DCC3] text-black font-semibold rounded-lg hover:bg-[#f5e8c9] transition"
+          >
+            Entrar
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
