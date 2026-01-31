@@ -24,6 +24,8 @@ import {
   CartesianGrid,
 } from "recharts";
 
+import { Eye, EyeOff, Lock } from "lucide-react";
+
 /* ============================================================
  * Utils
  * ============================================================ */
@@ -61,6 +63,12 @@ type PaymentRow = { amount: number | string | null; created_at: string };
  * Página
  * ============================================================ */
 export default function AdminDashboardPage() {
+
+  const [showMoney, setShowMoney] = useState(false);
+  const [askPassword, setAskPassword] = useState(false);
+  const [password, setPassword] = useState("");
+  const ADMIN_PASSWORD = "1234"; // ⚠️ depois te explico como deixar isso seguro
+
   const [loading, setLoading] = useState(true);
 
   const [stats, setStats] = useState({
@@ -71,6 +79,29 @@ export default function AdminDashboardPage() {
     recebido: 0,
     pendenteValor: 0,
   });
+
+  const handleToggleMoney = () => {
+  // se já está mostrando → apenas oculta
+  if (showMoney) {
+    setShowMoney(false);
+    setPassword("");
+    return;
+  }
+
+  // se não está mostrando → pede senha
+  setAskPassword(true);
+};
+
+const handleConfirmPassword = () => {
+  if (password === ADMIN_PASSWORD) {
+    setShowMoney(true);
+    setAskPassword(false);
+    setPassword("");
+  } else {
+    alert("Senha incorreta");
+  }
+};
+
 
   const [lastAppointments, setLastAppointments] = useState<
     {
@@ -286,6 +317,7 @@ export default function AdminDashboardPage() {
   }
 
   return (
+    
     <main className="p-6 bg-[#0A0F14] min-h-screen">
     {/* Header */}
     <div className="flex items-center justify-between">
@@ -328,20 +360,25 @@ export default function AdminDashboardPage() {
           accent="text-purple-400"
           border="border-purple-700/40"
         />
-        <KpiMoney
-          title="Total Recebido"
-          value={BRL(stats.recebido)}
-          icon={<CreditCard className="w-5 h-5" />}
-          accent="text-emerald-400"
-          border="border-emerald-700/40"
-        />
-        <KpiMoney
-          title="Pendentes (R$)"
-          value={BRL(stats.pendenteValor)}
-          icon={<Clock3 className="w-5 h-5" />}
-          accent="text-yellow-400"
-          border="border-yellow-700/40"
-        />
+<KpiMoney
+  title="Total Recebido"
+  value={BRL(stats.recebido)}
+  icon={<CreditCard className="w-5 h-5" />}
+  accent="text-emerald-400"
+  border="border-emerald-700/40"
+  show={showMoney}
+  onToggle={handleToggleMoney}
+/>
+
+<KpiMoney
+  title="Pendentes (R$)"
+  value={BRL(stats.pendenteValor)}
+  icon={<Clock3 className="w-5 h-5" />}
+  accent="text-yellow-400"
+  border="border-yellow-700/40"
+  show={showMoney}
+  onToggle={() => setAskPassword(true)}
+/>
       </section>
 
       {/* Gráficos */}
@@ -469,6 +506,53 @@ export default function AdminDashboardPage() {
           </div>
         </div>
       </section>
+      {/* 🔐 Modal de senha para valores */}
+{askPassword && (
+  <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+    <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 w-[90%] max-w-sm">
+      <div className="flex items-center gap-2 mb-4 text-[#D6C6AA]">
+        <Lock size={18} />
+        <h3 className="font-semibold">Confirmação de acesso</h3>
+      </div>
+
+      <input
+        type="password"
+        placeholder="Digite a senha"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        className="w-full px-3 py-2 rounded bg-gray-800 border border-gray-700 text-gray-200 mb-4"
+      />
+
+      <div className="flex justify-end gap-2">
+        <button
+          onClick={() => {
+            setAskPassword(false);
+            setPassword("");
+          }}
+          className="px-4 py-2 rounded bg-gray-700 text-gray-300"
+        >
+          Cancelar
+        </button>
+
+        <button
+          onClick={() => {
+            if (password === ADMIN_PASSWORD) {
+              setShowMoney(true);
+              setAskPassword(false);
+              setPassword("");
+            } else {
+              alert("Senha incorreta");
+            }
+          }}
+          className="px-4 py-2 rounded bg-[#D6C6AA] text-black font-semibold"
+        >
+          Confirmar
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
     </main>
   );
 }
@@ -548,20 +632,36 @@ function KpiMoney({
   icon,
   accent,
   border,
+  show,
+  onToggle,
 }: {
   title: string;
   value: string;
   icon: React.ReactNode;
   accent: string;
   border: string;
+  show: boolean;
+  onToggle: () => void;
 }) {
   return (
     <div className={`bg-gray-900 rounded-xl p-4 border ${border}`}>
       <div className="flex items-center justify-between mb-2">
         <span className="text-gray-400 text-sm">{title}</span>
-        <span className={`${accent}`}>{icon}</span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onToggle}
+            className="text-gray-400 hover:text-gray-200"
+            title="Mostrar / ocultar"
+          >
+            {show ? <EyeOff size={18} /> : <Eye size={18} />}
+          </button>
+          <span className={`${accent}`}>{icon}</span>
+        </div>
       </div>
-      <div className={`text-3xl font-bold ${accent}`}>{value}</div>
+
+      <div className={`text-3xl font-bold ${accent}`}>
+        {show ? value : "••••••"}
+      </div>
     </div>
   );
 }
