@@ -1,11 +1,11 @@
 "use client";
+
 import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
 export default function ResetPasswordContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const supabase = createClientComponentClient();
 
   const [password, setPassword] = useState("");
@@ -13,23 +13,24 @@ export default function ResetPasswordContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [isReady, setIsReady] = useState(false);
 
+  // 🔐 Valida sessão do link de recuperação
   useEffect(() => {
-    const hash = window.location.hash;
-    if (hash.includes("access_token")) {
-      const params = new URLSearchParams(hash.substring(1));
-      const access_token = params.get("access_token");
-      const refresh_token = params.get("refresh_token");
+    const initSession = async () => {
+      const { data } = await supabase.auth.getSession();
 
-      if (access_token && refresh_token) {
-        supabase.auth.setSession({
-          access_token,
-          refresh_token,
-        });
+      if (data.session) {
+        setIsReady(true);
+      } else {
+        setError("Link inválido ou expirado.");
       }
-    }
+    };
+
+    initSession();
   }, [supabase]);
 
+  // 🔄 Atualiza senha
   const handlePasswordReset = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -42,17 +43,36 @@ export default function ResetPasswordContent() {
       return;
     }
 
-    const { error } = await supabase.auth.updateUser({ password });
+    if (password.length < 6) {
+      setError("A senha deve ter no mínimo 6 caracteres.");
+      setLoading(false);
+      return;
+    }
+
+    const { error } = await supabase.auth.updateUser({
+      password,
+    });
 
     if (error) {
       setError(error.message);
     } else {
       setMessage("✅ Senha redefinida com sucesso! Redirecionando...");
-      setTimeout(() => router.push("/login"), 2500);
+      setTimeout(() => {
+        router.push("/login");
+      }, 2500);
     }
 
     setLoading(false);
   };
+
+  // ⏳ Enquanto valida sessão
+  if (!isReady && !error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-950 text-white">
+        Validando link...
+      </div>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
@@ -61,9 +81,55 @@ export default function ResetPasswordContent() {
           Redefinir Senha
         </h2>
 
-        <form onSubmit={handlePasswordReset} className="space-y-6">
-          {/* inputs... */}
-        </form>
+        {error && (
+          <div className="bg-red-500/20 text-red-400 p-3 rounded mb-4 text-sm">
+            {error}
+          </div>
+        )}
+
+        {message && (
+          <div className="bg-green-500/20 text-green-400 p-3 rounded mb-4 text-sm">
+            {message}
+          </div>
+        )}
+
+        {isReady && (
+          <form onSubmit={handlePasswordReset} className="space-y-6">
+            <div>
+              <label className="block text-sm text-gray-300 mb-2">
+                Nova Senha
+              </label>
+              <input
+                type="password"
+                className="w-full p-3 rounded bg-gray-800 text-white border border-gray-700 focus:outline-none focus:border-[#D6C6AA]"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm text-gray-300 mb-2">
+                Confirmar Nova Senha
+              </label>
+              <input
+                type="password"
+                className="w-full p-3 rounded bg-gray-800 text-white border border-gray-700 focus:outline-none focus:border-[#D6C6AA]"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-[#D6C6AA] text-black font-semibold py-3 rounded hover:opacity-90 transition"
+            >
+              {loading ? "Redefinindo..." : "Redefinir Senha"}
+            </button>
+          </form>
+        )}
       </div>
     </main>
   );
