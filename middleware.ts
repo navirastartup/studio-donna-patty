@@ -37,5 +37,5 @@ export async function middleware(req: NextRequest) {
 
 // Especifica quais caminhos o middleware deve ser executado
 export const config = {
-  matcher: ['/admin/:path*', '/login', '/reset-password'],
+  matcher: ['/admin/:path*', '/login'],
 };
